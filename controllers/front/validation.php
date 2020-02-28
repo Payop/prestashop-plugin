@@ -65,7 +65,7 @@ class PayopValidationModuleFrontController extends ModuleFrontController
         );
 
         try {
-            $order = new Order($cart->id);
+            $order = new Order($this->module->currentOrder);
             $currency = Currency::getCurrency($order->id_currency);
             $order_products = $order->getProducts();
             $payop_order_items = array();
