@@ -135,7 +135,8 @@ class Payop extends PaymentModule
 
     private function getPaymentsMethods()
     {
-        $requestUrl = 'https://payop.com/v1/instrument-settings/payment-methods/available-for-user';
+        $public_key = Configuration::get('PAYOP_PUBLIC_KEY');
+        $requestUrl = 'https://payop.com/v1/instrument-settings/payment-methods/available-for-application/'. str_replace('application-', '', $public_key);
         $jwtToken = "Authorization: Bearer ".Configuration::get('JWT_TOKEN');
         PrestaShopLogger::addlog($jwtToken);
         $ch = curl_init($requestUrl);
