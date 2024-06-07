@@ -2,11 +2,11 @@
     <div class="alert alert-success">{l s='Settings updated' mod='payop'}</div>
 {/if}
 <fieldset>
-    <h2>{l s='PayOp configuration' mod='payop'}</h2>
+    <h2>{l s='Payop configuration' mod='payop'}</h2>
     <div class="panel">
         <form id="data" action="" method="post">
             <div class="form-group clearfix">
-                <label class="col-lg-3">{l s='Enable PayOp payments' mod='payop'}</label>
+                <label class="col-lg-3">{l s='Enable Payop payments' mod='payop'}</label>
                 <div class="col-lg-9">
                     <img src="../img/admin/enabled.gif" alt="" />
                     <input type="radio" id="enablePayments_1" name="enablePayments" value="1" {if $enablePayments eq '1'}checked{/if}/>

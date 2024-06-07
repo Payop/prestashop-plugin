@@ -38,7 +38,7 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
                         PrestaShopLogger::addLog("Callback is not valid");
                     }
                 } else {
-                    PrestaShopLogger::addLog("Old API detected. Please contact PayOp support");
+                    PrestaShopLogger::addLog("Old API detected. Please contact Payop support");
                 }
             } else {
                 PrestaShopLogger::addLog("Callback is not an object");
