@@ -32,8 +32,8 @@ class Payop extends PaymentModule
         $this->currencies             = true;
         $this->currencies_mode        = 'checkbox';
         $this->bootstrap              = true;
-        $this->displayName            = 'PayOp';
-        $this->description            = 'Make payments via PayOp';
+        $this->displayName            = 'Payop';
+        $this->description            = 'Make payments via Payop';
         $this->confirmUninstall       = 'Are you sure you want to uninstall this module?';
         $this->ps_versions_compliancy = array('min' => '1.7.0', 'max' => _PS_VERSION_);
 
@@ -136,7 +136,7 @@ class Payop extends PaymentModule
     private function getPaymentsMethods()
     {
         $public_key = Configuration::get('PAYOP_PUBLIC_KEY');
-        $requestUrl = 'https://payop.com/v1/instrument-settings/payment-methods/available-for-application/'. str_replace('application-', '', $public_key);
+        $requestUrl = 'https://api.payop.com/v1/instrument-settings/payment-methods/available-for-application/'. str_replace('application-', '', $public_key);
         $jwtToken = "Authorization: Bearer ".Configuration::get('JWT_TOKEN');
         PrestaShopLogger::addlog($jwtToken);
         $ch = curl_init($requestUrl);
@@ -162,7 +162,7 @@ class Payop extends PaymentModule
     }
 
     /**
-     * Adds PayOp to payment options
+     * Adds Payop to payment options
      *
      * @return array|void
      */

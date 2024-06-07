@@ -1,3 +1,3 @@
 <h1>Congratulations!</h1>
-<P>You have just completed an order using PayOp.
+<P>You have just completed an order using Payop.
 </P>

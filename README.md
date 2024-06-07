@@ -1,4 +1,4 @@
-PrestaShop PayOp Payment Gateway
+PrestaShop Payop Payment Gateway
 =====================
 
 ## Brief Description
@@ -17,16 +17,16 @@ Add the ability to accept payments in PrestaShop via Payop.com.
  4. Click "Configure" after successful installation. 
  5. Configure and save your settings accordingly.
 
-You can issue  **Public key**, **JWT Token** and **Secret key** after registering as merchant on PayOp.com.  
+You can issue  **Public key**, **JWT Token** and **Secret key** after registering as merchant on Payop.com.  
 
-Use the following parameters to configure your PayOp project:
+Use the following parameters to configure your Payop project:
 * **Callback/IPN URL**: https://{replace-with-your-domain}/en/?fc=module&module=payop&controller=callback
 
 ## Support
 
 * [Open an issue](https://github.com/Payop/prestashop-plugin/issues) if you are having issues with this plugin.
-* [PayOp Documentation](https://payop.com/en/documentation/common/)
-* [Contact PayOp support](https://payop.com/en/contact-us/)
+* [Payop Documentation](https://payop.com/en/documentation/common/)
+* [Contact Payop support](https://payop.com/en/contact-us/)
   
 **TIP**: When contacting support, it will be helpful if you also provide some additional information, such as:
 

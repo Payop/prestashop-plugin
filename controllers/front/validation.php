@@ -105,7 +105,7 @@ class PayopValidationModuleFrontController extends ModuleFrontController
             );
             $request['language'] = $language;
 
-            $url = 'https://payop.com/v1/invoices/create';
+            $url = 'https://api.payop.com/v1/invoices/create';
             $request = json_encode($request);
             $ch = curl_init($url);
             curl_setopt($ch, CURLOPT_POST, 1);
@@ -125,7 +125,7 @@ class PayopValidationModuleFrontController extends ModuleFrontController
             $invoice_identifier = implode(',', $invoice_identifier);
             $invoice_identifier = substr($invoice_identifier, strrpos($invoice_identifier, ':')+2);
             curl_close($ch);
-            Tools::redirect('https://payop.com/'.$language.'/payment/invoice-preprocessing/'.
+            Tools::redirect('https://checkout.payop.com/'.$language.'/payment/invoice-preprocessing/'.
               $invoice_identifier);
         } catch (PrestaShopDatabaseException $e) {
             PrestaShopLogger::addLog($e);
