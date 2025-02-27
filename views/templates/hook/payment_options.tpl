@@ -1,3 +1,3 @@
 <form method="post" action="{$action}">
-    <span>{Configuration::get('DESCRIPTION')}</span>
+	<p>{Configuration::get('DESCRIPTION')}</p>
 </form>

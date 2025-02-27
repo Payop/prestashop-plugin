@@ -1,0 +1,41 @@
+name: Build and Release PrestaShop Module
+
+on:
+  push:
+    tags:
+      - 'v*' # Запускается при создании тега, например, v2.0.0
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare module folder
+        run: |
+          MODULE_NAME="payop"
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          ARCHIVE_NAME="${MODULE_NAME}-${VERSION}.zip"
+
+          # Создаём временную папку
+          mkdir "${MODULE_NAME}"
+          rsync -av --exclude='.git*' --exclude='.github' --exclude='*.zip' --exclude='release.sh' ./ "${MODULE_NAME}/"
+
+          # Архивируем
+          zip -r "${ARCHIVE_NAME}" "${MODULE_NAME}"
+
+          # Загружаем в артефакты
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ env.ARCHIVE_NAME }}
+          fail_on_unmatched_files: true
+          body: "🔹 New release for PrestaShop module\n\n✅ Version: ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
