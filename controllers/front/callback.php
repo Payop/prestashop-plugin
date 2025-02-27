@@ -2,97 +2,86 @@
 
 class PayopCallbackModuleFrontController extends ModuleFrontController
 {
-    public function initContent()
-    {
-        parent::initContent();
-        $this->callbackRequest();
-        $this->setTemplate('module:payop/views/templates/front/callback.tpl');
-    }
+	public function initContent()
+	{
+		parent::initContent();
+		$this->callbackRequest();
+		$this->setTemplate('module:payop/views/templates/front/callback.tpl');
+	}
 
-    /**
-     *
-     * @throws \PrestaShopDatabaseException
-     * @throws \PrestaShopException
-     */
-    private function callbackRequest()
-    {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $callback = json_decode(file_get_contents('php://input'));
-            $callback = json_encode($callback);
-            $callback = json_decode($callback, false);
-            if (is_object($callback)) {
-                if (isset($callback->invoice)) {
-                    if ($this->callbackCheck($callback) === 'valid') {
-                        $history = new OrderHistory();
-                        $order_id = $callback->transaction->order->id;
-                        $order = new Order($order_id);
-                        $history->id_order = $callback->transaction->order->id;
-                        if ($callback->transaction->state === 2) {
-                            $history->changeIdOrderState(2, $callback->transaction->order->id);
-                            $order->setCurrentState(2);
-                        } elseif ($callback->transaction->state === 3 or $callback->transaction->state === 5) {
-                            $history->changeIdOrderState(8, $callback->transaction->order->id);
-                            $order->setCurrentState(6);
-                        }
-                    } else {
-                        PrestaShopLogger::addLog("Callback is not valid");
-                    }
-                } else {
-                    PrestaShopLogger::addLog("Old API detected. Please contact Payop support");
-                }
-            } else {
-                PrestaShopLogger::addLog("Callback is not an object");
-            }
-        } else {
-            PrestaShopLogger::addLog("Invalid server request");
-        }
-    }
+	private function callbackRequest()
+	{
+		$rawData = file_get_contents('php://input');
 
-    /**
-     * Check callback
-     *
-     * @param $callback
-     *
-     * @return string
-     */
-    private function callbackCheck($callback)
-    {
-        $invoiceId = !empty($callback->invoice->id) ? $callback->invoice->id : null;
-        $txid = !empty($callback->invoice->txid) ? $callback->invoice->txid : null;
-        $orderId = !empty($callback->transaction->order->id) ? $callback->transaction->order->id : null;
-        $state = !empty($callback->transaction->state) ? $callback->transaction->state : null;
+		if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+			header("HTTP/1.1 400 Bad Request");
+			exit;
+		}
 
-        if (!$invoiceId) {
-            return 'Empty invoice id';
-        }
-        if (!$txid) {
-            return 'Empty transaction id';
-        }
-        if (!$orderId) {
-            return 'Empty order id';
-        }
-        if (!(1 <= $state && $state <= 5)) {
-            return 'State is not valid';
-        }
-        return 'valid';
-    }
+		$callback = json_decode($rawData, false);
+		if (!$callback) {
+			header("HTTP/1.1 400 Bad Request");
+			exit;
+		}
 
-    /**
-     * Generate signature
-     *
-     * @param $orderId
-     * @param $amount
-     * @param $currency
-     * @param $secretKey
-     *
-     * @return string
-     */
-    private function generateSignature($orderId, $amount, $currency, $secretKey)
-    {
-        $sign_str = ['id' => $orderId, 'amount' => $amount, 'currency' => $currency];
-        ksort($sign_str, SORT_STRING);
-        $sign_data = array_values($sign_str);
-        array_push($sign_data, $secretKey);
-        return hash('sha256', implode(':', $sign_data));
-    }
+		if (!isset($callback->transaction->order->id, $callback->transaction->state, $callback->invoice->id)) {
+			header("HTTP/1.1 400 Bad Request");
+			exit;
+		}
+
+		$order_id = (int) $callback->transaction->order->id;
+		$state = (int) $callback->transaction->state;
+		$invoice_id = $callback->invoice->id;
+
+		// Fetch the order
+		$order = new Order($order_id);
+		if (!Validate::isLoadedObject($order)) {
+			header("HTTP/1.1 400 Bad Request");
+			exit;
+		}
+
+		// Get PrestaShop order statuses
+		$paid_status = Configuration::get('PS_OS_PAYMENT'); // Paid
+		$failed_status = Configuration::get('PS_OS_ERROR'); // Failed
+		$pending_status = Configuration::get('PS_OS_PAYOP_PENDING_STATE'); // Pending
+		$timeout_status = Configuration::get('PS_OS_CANCELED'); // Timeout
+
+		$history = new OrderHistory();
+		$history->id_order = $order_id;
+
+		// Handle transaction states
+		switch ($state) {
+			case 1: // new
+			case 4: // pending
+			case 9: // pre-approved → Use pending
+				$history->changeIdOrderState($pending_status, $order_id);
+				break;
+
+			case 2: // accepted (paid successfully)
+				$history->changeIdOrderState($paid_status, $order_id);
+				$history->addWithemail();
+				$order->setCurrentState($paid_status);
+				$order->save();
+				break;
+
+			case 3: // failed
+			case 5: // failed (payment error)
+				$history->changeIdOrderState($failed_status, $order_id);
+				$history->addWithemail();
+				$order->setCurrentState($failed_status);
+				$order->save();
+				break;
+
+			case 15: // timeout
+				$history->changeIdOrderState($timeout_status, $order_id);
+				break;
+
+			default:
+				header("HTTP/1.1 400 Bad Request");
+				exit;
+		}
+
+		header("HTTP/1.1 200 OK");
+		exit;
+	}
 }

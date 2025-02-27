@@ -7,7 +7,8 @@ Add the ability to accept payments in PrestaShop via Payop.com.
 
 ## Requirements
 
--  PrestaShop 1.7+
+- PHP 7.4+
+- PrestaShop 8.0+
 
 
 ## Installation
@@ -17,7 +18,7 @@ Add the ability to accept payments in PrestaShop via Payop.com.
  4. Click "Configure" after successful installation. 
  5. Configure and save your settings accordingly.
 
-You can issue  **Public key**, **JWT Token** and **Secret key** after registering as merchant on Payop.com.  
+You can issue  **Public key** and **Secret key** after registering as merchant on Payop.com.
 
 Use the following parameters to configure your Payop project:
 * **Callback/IPN URL**: https://{replace-with-your-domain}/en/?fc=module&module=payop&controller=callback
