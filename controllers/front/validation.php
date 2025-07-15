@@ -4,14 +4,11 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 {
 	public function postProcess()
 	{
-		$cart     = $this->context->cart;
+		$cart = $this->context->cart;
 		$language = Configuration::get('PAYOP_LANGUAGE') ?: 'en';
-		$cartId  = (int) $cart->id;
+		$cartId = (int) $cart->id;
 
-		if (!$this->module->active
-			|| $cart->id_customer == 0
-			|| $cart->id_address_delivery == 0
-			|| $cart->id_address_invoice  == 0) {
+		if (!$this->module->active || $cart->id_customer == 0 || $cart->id_address_delivery == 0 || $cart->id_address_invoice  == 0) {
 			Tools::redirect('index.php?controller=order&step=1');
 		}
 
@@ -23,27 +20,27 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 		$items = [];
 		foreach ($cart->getProducts() as $product) {
 			$items[] = [
-				'id'       => (string) $product['id_product'],
-				'name'     => $product['name'],
-				'price'    => number_format((float) $product['price_wt'], 2, '.', ''),
+				'id' => (string) $product['id_product'],
+				'name' => $product['name'],
+				'price' => number_format((float) $product['price_wt'], 2, '.', ''),
 				'quantity' => (int) $product['cart_quantity'],
 			];
 		}
 
 		$address = new Address($cart->id_address_delivery);
 
-		$amount      = number_format((float) $cart->getOrderTotal(true, Cart::BOTH), 2, '.', '');
+		$amount = number_format((float) $cart->getOrderTotal(true, Cart::BOTH), 2, '.', '');
 		$currencyObj = Currency::getCurrency($cart->id_currency);
-		$currency    = $currencyObj['iso_code'];
+		$currency = $currencyObj['iso_code'];
 
 		$request = [
-			'publicKey'     => Configuration::get('PAYOP_PUBLIC_KEY'),
-			'order'         => [
-				'id'          => (string) $cartId,
-				'amount'      => $amount,
-				'currency'    => $currency,
+			'publicKey' => Configuration::get('PAYOP_PUBLIC_KEY'),
+			'order' => [
+				'id' => (string) $cartId,
+				'amount' => $amount,
+				'currency' => $currency,
 				'description' => 'Payment order #' . $cartId,
-				'items'       => $items,
+				'items' => $items,
 			],
 			'payer' => [
 				'email' => $customer->email,
@@ -66,12 +63,12 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 
 		try {
 			$url = 'https://api.payop.com/v1/invoices/create';
-			$ch  = curl_init($url);
+			$ch = curl_init($url);
 			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
 			curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($request));
 			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-			$result   = curl_exec($ch);
+			$result = curl_exec($ch);
 			curl_close($ch);
 
 			$response = json_decode($result, true);
@@ -89,8 +86,8 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 	private function generateSignature($orderId, $amount, $currency, $secretKey)
 	{
 		$data = [
-			'id'       => (string) $orderId,
-			'amount'   => number_format((float) $amount, 2, '.', ''),
+			'id' => (string) $orderId,
+			'amount' => number_format((float) $amount, 2, '.', ''),
 			'currency' => $currency,
 		];
 		ksort($data, SORT_STRING);
