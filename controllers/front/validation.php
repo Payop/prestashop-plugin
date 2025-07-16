@@ -5,80 +5,63 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 	public function postProcess()
 	{
 		$cart = $this->context->cart;
+		$language = Configuration::get('PAYOP_LANGUAGE') ?: 'en';
+		$cartId = (int) $cart->id;
 
-		// Ensure the module is active and necessary customer details are available
-		if (!$this->module->active || $cart->id_customer == 0 || $cart->id_address_delivery == 0 || $cart->id_address_invoice == 0) {
+		if (!$this->module->active || $cart->id_customer == 0 || $cart->id_address_delivery == 0 || $cart->id_address_invoice  == 0) {
 			Tools::redirect('index.php?controller=order&step=1');
 		}
 
 		$customer = new Customer($cart->id_customer);
-
-		// Validate customer object
 		if (!Validate::isLoadedObject($customer)) {
 			Tools::redirect('index.php?controller=order&step=1');
 		}
 
-		// Create order in PrestaShop
-		$this->module->validateOrder(
-			(int) $this->context->cart->id,
-			Configuration::get('PS_OS_PAYOP_PENDING_STATE'),
-			(float) $this->context->cart->getOrderTotal(true, Cart::BOTH),
-			$this->module->displayName,
-			null,
-			null,
-			(int) $this->context->currency->id,
-			false,
-			$customer->secure_key
-		);
+		$items = [];
+		foreach ($cart->getProducts() as $product) {
+			$items[] = [
+				'id' => (string) $product['id_product'],
+				'name' => $product['name'],
+				'price' => number_format((float) $product['price_wt'], 2, '.', ''),
+				'quantity' => (int) $product['cart_quantity'],
+			];
+		}
+
+		$address = new Address($cart->id_address_delivery);
+
+		$amount = number_format((float) $cart->getOrderTotal(true, Cart::BOTH), 2, '.', '');
+		$currencyObj = Currency::getCurrency($cart->id_currency);
+		$currency = $currencyObj['iso_code'];
+
+		$request = [
+			'publicKey' => Configuration::get('PAYOP_PUBLIC_KEY'),
+			'order' => [
+				'id' => (string) $cartId,
+				'amount' => $amount,
+				'currency' => $currency,
+				'description' => 'Payment order #' . $cartId,
+				'items' => $items,
+			],
+			'payer' => [
+				'email' => $customer->email,
+				'name' => $customer->firstname . ' ' . $customer->lastname,
+				'phone' => $address->phone ?: '',
+			],
+			'resultUrl' => $this->context->link->getModuleLink($this->module->name, 'createOrder', [
+				'cart_id' => $cartId,
+				'key' => $customer->secure_key,
+			], true),
+    	'failPath' => $this->context->link->getModuleLink($this->module->name, 'failPage', ['cart_id' => $cartId], true),
+			'signature' => $this->generateSignature(
+				(string) $cartId,
+				$amount,
+				$currency,
+				Configuration::get('PAYOP_SECRET_KEY')
+			),
+			'language' => $language,
+		];
 
 		try {
-			$order = new Order($this->module->currentOrder);
-			$currency = Currency::getCurrency($order->id_currency);
-			$address = new Address($cart->id_address_delivery);
-
-			// Retrieve order products
-			$order_products = $order->getProducts();
-			$items = [];
-			foreach ($order_products as $product) {
-				$items[] = [
-					'id' => (string) $product['product_id'],
-					'name' => $product['product_name'],
-					'price' => number_format($product['unit_price_tax_incl'], 2, '.', ''),
-					'quantity' => (int) $product['product_quantity'],
-				];
-			}
-
-			// Prepare payment request data
-			$request = [
-				'publicKey' => Configuration::get('PAYOP_PUBLIC_KEY'),
-				'order' => [
-					'id' => (string) $this->module->currentOrder,
-					'amount' => number_format((float) $order->total_paid, 2, '.', ''),
-					'currency' => $currency['iso_code'],
-					'description' => 'Payment order #' . $this->module->currentOrder,
-					'items' => $items,
-				],
-				'payer' => [
-					'email' => $customer->email,
-					'name' => $customer->firstname . ' ' . $customer->lastname,
-					'phone' => $address->phone ?: '',
-				],
-				'resultUrl' => $this->context->link->getPageLink('order-confirmation', true, null, [
-					'id_cart' => (int) $cart->id,
-					'id_module' => (int) $this->module->id,
-					'id_order' => (int) $this->module->currentOrder,
-					'key' => $customer->secure_key,
-				]),
-				'failPath' => _PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage&id_order=" . (int)$this->module->currentOrder,
-				'signature' => $this->generateSignature(
-					(string) $this->module->currentOrder,
-					(float) $order->total_paid,
-					$currency['iso_code'],
-					Configuration::get('PAYOP_SECRET_KEY')
-				),
-				'language' => Configuration::get('PAYOP_LANGUAGE'),
-			];
-
 			// Send request to Payop API
 			$url = 'https://api.payop.com/v1/invoices/create';
 			$ch = curl_init($url);
@@ -95,13 +78,13 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 
 			// Redirect user to payment page or failure page
 			if (isset($response['data'])) {
-				$invoiceId = $response['data'];
-				Tools::redirect('https://checkout.payop.com/' . Configuration::get('PAYOP_LANGUAGE') . '/payment/invoice-preprocessing/' . $invoiceId);
+				Tools::redirect('https://checkout.payop.com/' . $language . '/payment/invoice-preprocessing/' . $response['data']);
 			} else {
-				Tools::redirect(_PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage");
+				Tools::redirect(_PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage&cart_id=" . $cartId);
 			}
 		} catch (Exception $e) {
 			PrestaShopLogger::addLog("[Payop] Exception: " . $e->getMessage());
+			Tools::redirect(_PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage&cart_id=" . $cartId);
 		}
 	}
 
