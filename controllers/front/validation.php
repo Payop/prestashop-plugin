@@ -62,27 +62,43 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 		];
 
 		try {
+			// Send request to Payop API
 			$url = 'https://api.payop.com/v1/invoices/create';
 			$ch = curl_init($url);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+			curl_setopt($ch, CURLOPT_POST, 1);
 			curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($request));
+			curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 			$result = curl_exec($ch);
 			curl_close($ch);
 
 			$response = json_decode($result, true);
+
+			// Redirect user to payment page or failure page
 			if (isset($response['data'])) {
 				Tools::redirect('https://checkout.payop.com/'. $language .'/payment/invoice-preprocessing/' . $response['data']);
 			} else {
 				Tools::redirect(_PS_BASE_URL_.__PS_BASE_URI__."index.php?fc=module&module=payop&controller=failPage&cart_id=".$cartId);
 			}
 		} catch (Exception $e) {
-			PrestaShopLogger::addLog('[Payop] Exception: '.$e->getMessage());
+			PrestaShopLogger::addLog('[Payop] Exception: ' . $e->getMessage());
 			Tools::redirect(_PS_BASE_URL_.__PS_BASE_URI__."index.php?fc=module&module=payop&controller=failPage&cart_id=".$cartId);
 		}
 	}
 
+	/**
+	 * Signature generation
+	 * Payop requires sorting parameters before signing
+	 *
+	 * @param string $orderId
+	 * @param float $amount
+	 * @param string $currency
+	 * @param string $secretKey
+	 *
+	 * @return string
+	 */
 	private function generateSignature($orderId, $amount, $currency, $secretKey)
 	{
 		$data = [
@@ -90,8 +106,10 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 			'amount' => number_format((float) $amount, 2, '.', ''),
 			'currency' => $currency,
 		];
-		ksort($data, SORT_STRING);
 
-		return hash('sha256', implode(':', array_values($data)).':'.$secretKey);
+		ksort($data, SORT_STRING);
+		$stringToSign = implode(':', array_values($data)) . ':' . $secretKey;
+
+		return hash('sha256', $stringToSign);
 	}
 }

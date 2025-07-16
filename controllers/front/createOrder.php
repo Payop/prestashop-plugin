@@ -1,5 +1,5 @@
 <?php
-class PayopCallbackModuleFrontController extends ModuleFrontController
+class PayopCreateOrderModuleFrontController  extends ModuleFrontController
 {
 	public function postProcess()
 	{
