@@ -78,13 +78,13 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 
 			// Redirect user to payment page or failure page
 			if (isset($response['data'])) {
-				Tools::redirect('https://checkout.payop.com/'. $language .'/payment/invoice-preprocessing/' . $response['data']);
+				Tools::redirect('https://checkout.payop.com/' . $language . '/payment/invoice-preprocessing/' . $response['data']);
 			} else {
-				Tools::redirect(_PS_BASE_URL_.__PS_BASE_URI__."index.php?fc=module&module=payop&controller=failPage&cart_id=".$cartId);
+				Tools::redirect(_PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage&cart_id=" . $cartId);
 			}
 		} catch (Exception $e) {
-			PrestaShopLogger::addLog('[Payop] Exception: ' . $e->getMessage());
-			Tools::redirect(_PS_BASE_URL_.__PS_BASE_URI__."index.php?fc=module&module=payop&controller=failPage&cart_id=".$cartId);
+			PrestaShopLogger::addLog("[Payop] Exception: " . $e->getMessage());
+			Tools::redirect(_PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage&cart_id=" . $cartId);
 		}
 	}
 
