@@ -63,10 +63,10 @@ Use the following parameters to configure your Payop project:
 * Changed plugin name
 
 = v2.0.0 =
-* 2017-01-23
+* 2025-02-27
 * Improvements and support for PrestaShop 8.0+
 
 = 2.1.0 =
-* 2025-02-27
+* 2025-07-22
 * The order is created only after payment has been made.
 * The cart is cleared only after the payment has been made.
