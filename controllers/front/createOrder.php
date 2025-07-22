@@ -24,7 +24,7 @@ class PayopCreateOrderModuleFrontController  extends ModuleFrontController
 
 			$module->validateOrder(
 				$cartId,
-				(int) Configuration::get('PS_OS_PAYMENT'),
+				(int) Configuration::get('PS_OS_PAYOP_PENDING_STATE'),
 				(float) $cart->getOrderTotal(true, Cart::BOTH),
 				$module->displayName,
 				null,
