@@ -46,6 +46,9 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 				'email' => $customer->email,
 				'name' => $customer->firstname . ' ' . $customer->lastname,
 				'phone' => $address->phone ?: '',
+				"extraFields" => [
+					"date_of_birth" => $customer->birthday ?: '',
+				]
 			],
 			'resultUrl' => $this->context->link->getModuleLink($this->module->name, 'createOrder', [
 				'cart_id' => $cartId,
