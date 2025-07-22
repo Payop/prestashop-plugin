@@ -58,3 +58,24 @@ which means if you would like to use this project's code in your own project you
 Please refer to the 
 [LICENSE](https://github.com/Payop/prestashop-plugin/blob/master/LICENSE)
 file that come with this project.
+
+
+## Changelog
+
+= v1.0.1-beta =
+* 2020-02-28
+* Fix wrong order id on checkout
+
+= v1.0.2-beta =
+* 2024-06-07
+* changed the domain for the API
+* Changed plugin name
+
+= v2.0.0 =
+* 2025-02-27
+* Improvements and support for PrestaShop 8.0+
+
+= 2.1.0 =
+* 2025-07-22
+* The order is created only after payment has been made.
+* The cart is cleared only after the payment has been made.
