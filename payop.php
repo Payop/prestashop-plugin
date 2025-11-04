@@ -15,9 +15,9 @@ class Payop extends PaymentModule
 	{
 		$this->name = 'payop';
 		$this->tab = 'payments_gateways';
-		$this->version = '2.0.0';
+		$this->version = '2.2.0';
 		$this->author = 'PAYOP';
-		$this->controllers = ['payment', 'validation', 'failPage', 'callback', 'createOrder'];
+		$this->controllers = ['payment', 'validation', 'failPage', 'callback'];
 		$this->currencies = true;
 		$this->currencies_mode = 'checkbox';
 		$this->bootstrap = true;
@@ -32,8 +32,8 @@ class Payop extends PaymentModule
 	public function install()
 	{
 		return parent::install()
-			&& $this->registerHook('PaymentOptions')
-			&& $this->registerHook('PaymentReturn')
+			&& $this->registerHook('paymentOptions')
+			&& $this->registerHook('displayPaymentReturn')
 			&& $this->installOrderState();
 	}
 
@@ -128,7 +128,7 @@ class Payop extends PaymentModule
 		return true;
 	}
 
-	public function hookPaymentReturn($params)
+	public function hookDisplayPaymentReturn($params)
 	{
 		if (!$this->active) {
 			return;

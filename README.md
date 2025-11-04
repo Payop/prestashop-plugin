@@ -79,3 +79,7 @@ file that come with this project.
 * 2025-07-22
 * The order is created only after payment has been made.
 * The cart is cleared only after the payment has been made.
+
+= 2.2.0 =
+* 2025-11-04
+* The order is created immediately after the client switches to the payment system; this is the most correct solution that does not cause side effects.

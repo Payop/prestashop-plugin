@@ -29,16 +29,9 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 			exit;
 		}
 
-		$cart_id = (int) $callback->transaction->order->id;
+		$order_id = (int) $callback->transaction->order->id;
 		$state = (int) $callback->transaction->state;
 		$invoice_id = $callback->invoice->id;
-
-		// get id order from id cart
-		$order_id = Order::getOrderByCartId($cart_id);
-		if (!$order_id) {
-			header("HTTP/1.1 400 Bad Request");
-			exit;
-		}
 
 		// Fetch the order
 		$order = new Order($order_id);
