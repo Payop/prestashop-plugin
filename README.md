@@ -83,3 +83,10 @@ file that come with this project.
 = 2.2.0 =
 * 2025-11-04
 * The order is created immediately after the client switches to the payment system; this is the most correct solution that does not cause side effects.
+
+= 2.2.1 =
+* 2025-11-14
+* Improved callback handling for PayOp.
+* Order status and payment records are now fully synchronized.
+* Payment information (amount, method, transaction ID) is automatically added to the “Payments” section of the order.
+* Duplicate payment records are prevented when the payment system sends repeated callbacks.
