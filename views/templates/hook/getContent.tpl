@@ -17,33 +17,49 @@
 				</div>
 			</div>
 
-			<div class="form-group clearfix">
-				<label class="col-lg-3">{l s='Display Name' mod='payop'}</label>
-				<div class="col-lg-9">
-					<input type="text" id="displayName" name="displayName" value="{if isset($displayName)}{$displayName}{/if}" placeholder="{l s='Payment method displayed name' mod='payop'}"/>
+				<div class="form-group clearfix">
+					<label class="col-lg-3">{l s='Display Name' mod='payop'}</label>
+					<div class="col-lg-9">
+						<input type="text" id="displayName" name="displayName" value="{if isset($displayName)}{$displayName|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Payment method displayed name' mod='payop'}"/>
+					</div>
 				</div>
-			</div>
 
-			<div class="form-group clearfix">
-				<label class="col-lg-3">{l s='Description' mod='payop'}</label>
-				<div class="col-lg-9">
-					<input type="text" id="description" name="description" value="{if isset($description)}{$description}{/if}" placeholder="{l s='Payment method description' mod='payop'}"/>
+				<div class="form-group clearfix">
+					<label class="col-lg-3">{l s='Description' mod='payop'}</label>
+					<div class="col-lg-9">
+						<input type="text" id="description" name="description" value="{if isset($description)}{$description|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Payment method description' mod='payop'}"/>
+					</div>
 				</div>
-			</div>
 
-			<div class="form-group clearfix">
-				<label class="col-lg-3">{l s='Public Key' mod='payop'}</label>
-				<div class="col-lg-9">
-					<input type="text" id="publicKey" name="publicKey" value="{if isset($publicKey)}{$publicKey}{/if}" placeholder="{l s='Issued in project settings' mod='payop'}"/>
+				<div class="form-group clearfix">
+					<label class="col-lg-3">{l s='Public Key' mod='payop'}</label>
+					<div class="col-lg-9">
+						<input type="text" id="publicKey" name="publicKey" value="{if isset($publicKey)}{$publicKey|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Issued in project settings' mod='payop'}"/>
+					</div>
 				</div>
-			</div>
 
-			<div class="form-group clearfix">
-				<label class="col-lg-3">{l s='Secret Key' mod='payop'}</label>
-				<div class="col-lg-9">
-					<input type="text" id="secretKey" name="secretKey" value="{if isset($secretKey)}{$secretKey}{/if}" placeholder="{l s='Issued in project settings' mod='payop'}"/>
+				<div class="form-group clearfix">
+					<label class="col-lg-3">{l s='Secret Key' mod='payop'}</label>
+					<div class="col-lg-9">
+						<input type="password" id="secretKey" name="secretKey" value="{if isset($secretKey)}{$secretKey|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Issued in project settings' mod='payop'}" autocomplete="new-password"/>
+					</div>
 				</div>
-			</div>
+
+				<div class="form-group clearfix">
+					<label class="col-lg-3">{l s='API JWT Token' mod='payop'}</label>
+					<div class="col-lg-9">
+						<input type="password" id="apiToken" name="apiToken" value="{if isset($apiToken)}{$apiToken|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Used for server-side transaction verification' mod='payop'}" autocomplete="new-password"/>
+						<p class="help-block">{l s='Create a Bearer token in the Payop dashboard and paste it here for callback verification.' mod='payop'}</p>
+					</div>
+				</div>
+
+				<div class="form-group clearfix">
+					<label class="col-lg-3">{l s='Signed Callback URL' mod='payop'}</label>
+					<div class="col-lg-9">
+						<input type="text" readonly="readonly" value="{if isset($callbackUrl)}{$callbackUrl|escape:'htmlall':'UTF-8'}{/if}"/>
+						<p class="help-block">{l s='Set exactly this URL as IPN/Callback URL in the Payop project settings.' mod='payop'}</p>
+					</div>
+				</div>
 
 			<div class="panel-footer">
 				<input class="btn btn-default pull-right" type="submit" name="pc_form" value="{l s='Save' mod='payop'}" />

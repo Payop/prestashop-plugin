@@ -18,10 +18,11 @@ Add the ability to accept payments in PrestaShop via Payop.com.
  4. Click "Configure" after successful installation. 
  5. Configure and save your settings accordingly.
 
-You can issue  **Public key** and **Secret key** after registering as merchant on Payop.com.
+You can issue **Public key** and **Secret key** after registering as merchant on Payop.com.
 
 Use the following parameters to configure your Payop project:
-* **Callback/IPN URL**: https://{replace-with-your-domain}/en/?fc=module&module=payop&controller=callback
+* **API JWT Token**: Create a Bearer token in the Payop dashboard and paste it into the module settings.
+* **Callback/IPN URL**: Copy the **Signed Callback URL** directly from the module settings page after saving the configuration.
 
 ## Support
 
@@ -90,3 +91,13 @@ file that come with this project.
 * Order status and payment records are now fully synchronized.
 * Payment information (amount, method, transaction ID) is automatically added to the “Payments” section of the order.
 * Duplicate payment records are prevented when the payment system sends repeated callbacks.
+
+= 2.3.0 =
+* 2026-04-01
+* Added a dedicated success page for customer return flow to avoid broken order confirmation redirects and 404 pages.
+* Fixed success page rendering so it is displayed inside the active PrestaShop theme layout.
+* Added API JWT Token configuration for mandatory server-side transaction verification through Payop API v2.
+* Hardened callback processing with signed callback URL validation, order-module validation, stored invoice binding, and mandatory txid checks.
+* Removed insecure callback fallback logic: order statuses are updated only after successful Payop API verification.
+* Updated transaction verification to use Payop v2 fields such as productAmount, productCurrency, orderId, and identifier.
+* Improved invoice identifier handling by prioritizing the identifier response header as recommended by Payop documentation.

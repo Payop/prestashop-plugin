@@ -2,6 +2,7 @@
 
 class PayopValidationModuleFrontController extends ModuleFrontController
 {
+
 	public function postProcess()
 	{
 		$context = $this->context;
@@ -10,7 +11,7 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 		$customer = new Customer($cart->id_customer);
 		$language = Configuration::get('PAYOP_LANGUAGE') ?: 'en';
 
-		if (!$this->module->active || $cart->id_customer == 0 || $cart->id_address_delivery == 0 || $cart->id_address_invoice  == 0) {
+		if (!$this->module->active || !(bool) Configuration::get('PAYOP_ENABLE') || $cart->id_customer == 0 || $cart->id_address_delivery == 0 || $cart->id_address_invoice  == 0) {
 			Tools::redirect('index.php?controller=order&step=1');
 		}
 
@@ -42,6 +43,8 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 			$order = new Order($idOrder);
 			$address = new Address($cart->id_address_delivery);
 			$currency = Currency::getCurrency($order->id_currency);
+			$failUrl = $this->module->getFailUrl($idOrder, (int) $cart->id, $customer->secure_key);
+			$successUrl = $this->module->getSuccessUrl($idOrder, (int) $cart->id, $customer->secure_key);
 
 			// Retrieve order products
 			$order_products = $order->getProducts();
@@ -73,13 +76,8 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 						"date_of_birth" => $customer->birthday ?: '',
 					]
 				],
-				'resultUrl' => $this->context->link->getPageLink('order-confirmation', true, null, [
-					'id_cart' => (int) $cart->id,
-					'id_module' => (int) $this->module->id,
-					'id_order' => (int) $this->module->currentOrder,
-					'key' => $customer->secure_key,
-				]),
-				'failPath' => _PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage&id_order=" . (int)$this->module->currentOrder,
+				'resultUrl' => $successUrl,
+				'failPath' => $failUrl,
 				'signature' => $this->generateSignature(
 					(string) $this->module->currentOrder,
 					(float) $order->total_paid,
@@ -92,28 +90,59 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 			// Send request to Payop API
 			$url = 'https://api.payop.com/v1/invoices/create';
 			$ch = curl_init($url);
+			$responseHeaders = [];
 			curl_setopt($ch, CURLOPT_POST, 1);
 			curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($request));
 			curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
 			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+			curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($curl, $headerLine) use (&$responseHeaders) {
+				$headerLength = strlen($headerLine);
+				$headerParts = explode(':', $headerLine, 2);
+				if (count($headerParts) === 2) {
+					$responseHeaders[Tools::strtolower(trim($headerParts[0]))] = trim($headerParts[1]);
+				}
+
+				return $headerLength;
+			});
+			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+			curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 			$result = curl_exec($ch);
+			$httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+			$curlError = curl_error($ch);
 			curl_close($ch);
 
 			$response = json_decode($result, true);
 
 			// Redirect user to payment page or failure page
-			if (!empty($response['data'])) {
-				$invoiceId = $response['data'];
+				$invoiceId = '';
+				if (!empty($responseHeaders['identifier'])) {
+					$invoiceId = (string) $responseHeaders['identifier'];
+				} elseif (isset($response['data']) && !is_array($response['data'])) {
+					$invoiceId = (string) $response['data'];
+				} elseif (!empty($response['data']['id'])) {
+					$invoiceId = (string) $response['data']['id'];
+				}
+
+			if ($httpCode >= 200 && $httpCode < 300 && $invoiceId !== '') {
+				if (!$this->module->saveOrderMeta($idOrder, (int) $cart->id, $invoiceId)) {
+					throw new Exception('Unable to persist Payop invoice metadata.');
+				}
 
 				Tools::redirect('https://checkout.payop.com/' . $language . '/payment/invoice-preprocessing/' . $invoiceId);
 			} else {
-				Tools::redirect(_PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage");
+				if ($curlError) {
+					PrestaShopLogger::addLog('[Payop] Invoice creation failed: ' . $curlError);
+				} else {
+					PrestaShopLogger::addLog('[Payop] Unexpected invoice creation response. HTTP code: ' . $httpCode);
+				}
+
+				Tools::redirect($failUrl);
 			}
 		} catch (Exception $e) {
 			PrestaShopLogger::addLog("[Payop] Exception: " . $e->getMessage());
-			Tools::redirect(_PS_BASE_URL_ . __PS_BASE_URI__ . "index.php?fc=module&module=payop&controller=failPage&cart_id=" . $cartId);
+			Tools::redirect($this->module->getFailUrl($idOrder, (int) $cartId, $customer->secure_key));
 		}
 	}
 
