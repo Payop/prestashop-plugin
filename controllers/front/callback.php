@@ -101,8 +101,8 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 			case 2:
 				if ($currentState !== $paidStatus) {
 					$this->changeOrderState($order, $paidStatus, true);
-					$this->addPaymentIfNeeded($order, $transactionId);
 				}
+				$this->addPaymentIfNeeded($order, $transactionId);
 				break;
 
 			case 3:
@@ -161,17 +161,43 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 		$orderTotal = (float) $order->total_paid;
 		$currency = new Currency((int) $order->id_currency);
 		$payments = $order->getOrderPayments();
+		$paymentWithoutTransaction = null;
 
 		foreach ($payments as $payment) {
-			if (
-				(!empty($payment->transaction_id) && $payment->transaction_id === $transactionId) ||
-				(float) $payment->amount === $orderTotal
-			) {
+			if (!empty($payment->transaction_id) && $payment->transaction_id === $transactionId) {
 				return;
+			}
+
+			if ((float) $payment->amount === $orderTotal) {
+				if (!empty($payment->transaction_id)) {
+					return;
+				}
+
+				if ($paymentWithoutTransaction === null) {
+					$paymentWithoutTransaction = $payment;
+				}
 			}
 		}
 
-		$order->addOrderPayment($orderTotal, 'PayOp', $transactionId, $currency);
+		if ($paymentWithoutTransaction instanceof OrderPayment) {
+			$paymentWithoutTransaction->transaction_id = pSQL((string) $transactionId);
+			if (empty($paymentWithoutTransaction->payment_method)) {
+				$paymentWithoutTransaction->payment_method = (string) $order->payment;
+			}
+
+			if (!$paymentWithoutTransaction->update()) {
+				PrestaShopLogger::addLog('[Payop] Failed to update transaction ID for order #' . (int) $order->id . '.');
+			}
+
+			return;
+		}
+
+		$paymentMethod = trim((string) $order->payment);
+		if ($paymentMethod === '') {
+			$paymentMethod = (string) $this->module->displayName;
+		}
+
+		$order->addOrderPayment($orderTotal, $paymentMethod, $transactionId, $currency);
 	}
 
 	private function respond($statusCode, $body = '')

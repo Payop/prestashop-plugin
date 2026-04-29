@@ -101,3 +101,7 @@ file that come with this project.
 * Removed insecure callback fallback logic: order statuses are updated only after successful Payop API verification.
 * Updated transaction verification to use Payop v2 fields such as productAmount, productCurrency, orderId, and identifier.
 * Improved invoice identifier handling by prioritizing the identifier response header as recommended by Payop documentation.
+
+= 2.3.1 =
+* 2026-04-29
+* Improved payment record handling in callbacks: existing order payments are updated with the transaction ID when possible, and duplicate payment records are avoided.
