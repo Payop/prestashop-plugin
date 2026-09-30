@@ -22,7 +22,7 @@ jobs:
 
           # Создаём временную папку
           mkdir "${MODULE_NAME}"
-          rsync -av --exclude='.git*' --exclude='.github' --exclude='*.zip' --exclude='release.sh' ./ "${MODULE_NAME}/"
+          rsync -av --exclude='.git*' --exclude='.github' --exclude='*.zip' --exclude='release.sh' --exclude='tests' --exclude='RELEASE-CHECKLIST.md' ./ "${MODULE_NAME}/"
 
           # Архивируем
           zip -r "${ARCHIVE_NAME}" "${MODULE_NAME}"
