@@ -6,10 +6,10 @@
 <fieldset>
 	<h2>{l s='Payop configuration' mod='payop'}</h2>
 	<div class="panel">
-		<form id="payop-settings-form" id="data" action="" method="post">
+		<form id="payop-settings-form" action="" method="post">
             <input type="hidden" name="payop_settings_token" value="{$payop_settings_token|escape:'htmlall':'UTF-8'}" />
             <input type="hidden" id="payop-buttons-json" name="payop_buttons_json" value="{$payop_buttons_json|escape:'htmlall':'UTF-8'}" />
-            <textarea id="payop-editor-data" hidden>{$payop_editor_json|escape:'htmlall':'UTF-8'}</textarea>
+            <textarea id="payop-editor-data" hidden style="display: none !important;">{$payop_editor_json|escape:'htmlall':'UTF-8'}</textarea>
 
 			<div class="form-group clearfix">
 				<label class="col-lg-3">{l s='Enable Payop payments' mod='payop'}</label>
