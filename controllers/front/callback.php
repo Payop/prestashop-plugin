@@ -80,26 +80,13 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 			$this->respond(409, 'missing_transaction_id');
 		}
 
-		if (!$this->module->hasApiToken()) {
-			PrestaShopLogger::addLog('[Payop] Callback rejected for order #' . $orderId . ' because API token is missing.');
-			$this->respond(409, 'missing_api_token');
-		}
-
-		$transaction = $this->module->fetchTransaction($transactionId);
-		if (empty($transaction['ok'])) {
-			PrestaShopLogger::addLog('[Payop] Transaction API lookup failed for order #' . $orderId . ': ' . (isset($transaction['error']) ? $transaction['error'] : 'unknown error') . '.');
-			$this->respond(409, 'transaction_lookup_failed');
-		}
-
-		$verification = $this->module->verifyTransactionForOrder($transaction, $order, $state, $transactionId);
+		$invoice = $this->module->fetchInvoice($invoiceId);
+		$verification = $this->module->verifyInvoiceForOrder($invoice, $order, $invoiceId, $transactionId, $state);
 		if (empty($verification['ok'])) {
-			PrestaShopLogger::addLog('[Payop] Transaction verification failed for order #' . $orderId . ': ' . $verification['error'] . '.');
-			$this->respond(409, 'transaction_verification_failed');
+			PrestaShopLogger::addLog('[Payop] Invoice verification failed for order #' . $orderId . '.');
+			$this->respond(409, 'invoice_verification_failed');
 		}
-
-		if (!$this->module->verifyInvoiceTransaction($order, $invoiceId, $transactionId)) {
-			$this->respond(409, 'invoice_transaction_mismatch');
-		}
+		$state = (int) $verification['state'];
 		if (!$this->module->mayChangeInvoiceOrderState($order, $invoiceId, $state)) {
 			if ($state === 2) {
 				$this->addPaymentIfNeeded($order, $transactionId);
@@ -163,6 +150,11 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 	private function isValidCallbackSignature()
 	{
 		$providedSignature = Tools::getValue('signature');
+		// Legacy merchants can keep their existing unsigned callback URL.
+		// Every event still requires full server-side invoice verification below.
+		if ($providedSignature === false || $providedSignature === null || $providedSignature === '') {
+			return true;
+		}
 		$expectedSignature = (string) $this->module->getCallbackSignature();
 
 		return is_string($providedSignature) && $providedSignature !== '' && $expectedSignature !== '' && hash_equals($expectedSignature, $providedSignature);

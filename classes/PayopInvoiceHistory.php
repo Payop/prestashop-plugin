@@ -144,18 +144,71 @@ trait PayopInvoiceHistory
         return ['ok' => true, 'invoice_id' => $id];
     }
 
-    public function verifyInvoiceTransaction(Order $order, $invoiceId, $transactionId)
+    public function fetchInvoice($invoiceId)
+    {
+        $response = $this->requestInvoiceDetails($invoiceId);
+        if (empty($response['ok']) || !isset($response['data']) || !is_array($response['data'])) {
+            return ['ok' => false, 'error' => 'Invoice lookup failed'];
+        }
+        return ['ok' => true, 'data' => $response['data']];
+    }
+
+    protected function requestInvoiceDetails($invoiceId)
     {
         $ch = curl_init('https://api.payop.com/v1/invoices/' . rawurlencode($invoiceId));
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_SSL_VERIFYPEER => true, CURLOPT_HTTPHEADER => ['Accept: application/json', 'Authorization: Bearer ' . $this->getApiToken()]]);
+        // The invoice endpoint does not require JWT. Never couple payment
+        // confirmation to credentials used to discover the project catalogue.
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'Content-Type: application/json']]);
         $body = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         $response = is_string($body) ? json_decode($body, true) : null;
-        $data = isset($response['data']) && is_array($response['data']) ? $response['data'] : [];
-        return $status === 200 && isset($data['identifier'], $data['txid'])
-            && is_scalar($data['identifier']) && is_scalar($data['txid'])
-            && hash_equals($invoiceId, (string) $data['identifier'])
-            && hash_equals($transactionId, (string) $data['txid']);
+        if ($status !== 200 || !isset($response['data']) || !is_array($response['data'])) {
+            return ['ok' => false];
+        }
+        return ['ok' => true, 'data' => $response['data']];
+    }
+
+    public function verifyInvoiceForOrder(array $invoice, Order $order, $invoiceId, $transactionId, $expectedState)
+    {
+        if (empty($invoice['ok']) || !isset($invoice['data']) || !is_array($invoice['data'])) {
+            return ['ok' => false, 'error' => 'Invoice lookup failed'];
+        }
+        $data = $invoice['data'];
+        foreach (['identifier', 'orderIdentifier', 'amount', 'currency', 'status', 'transactionIdentifier'] as $field) {
+            if (!isset($data[$field]) || !is_scalar($data[$field])) {
+                return ['ok' => false, 'error' => 'Missing invoice verification field'];
+            }
+        }
+        if (!hash_equals($invoiceId, (string) $data['identifier'])
+            || (string) $data['orderIdentifier'] !== (string) $order->id
+            || !hash_equals($transactionId, (string) $data['transactionIdentifier'])) {
+            return ['ok' => false, 'error' => 'Invoice/order/transaction binding mismatch'];
+        }
+        if (!is_numeric($data['amount']) || !is_finite((float) $data['amount'])
+            || number_format((float) $data['amount'], 4, '.', '') !== number_format((float) $order->total_paid, 4, '.', '')) {
+            return ['ok' => false, 'error' => 'Amount mismatch'];
+        }
+        $currency = new Currency((int) $order->id_currency);
+        if (strtoupper((string) $data['currency']) !== strtoupper((string) $currency->iso_code)) {
+            return ['ok' => false, 'error' => 'Currency mismatch'];
+        }
+        $status = (int) $data['status'];
+        if (!in_array($status, [0, 1, 2, 4, 5], true)) {
+            return ['ok' => false, 'error' => 'Unsupported invoice status'];
+        }
+        // Invoice statuses and transaction states use different enumerations.
+        $state = $status === 1 ? 2 : (($status === 2 || !empty($data['isOverdue'])) ? 15 : ($status === 5 ? 5 : 4));
+        $expectedState = (int) $expectedState;
+        $matches = ($expectedState === 2 && $state === 2)
+            || (in_array($expectedState, [3, 5], true) && in_array($state, [5, 15], true))
+            || ($expectedState === 15 && $state === 15)
+            || (in_array($expectedState, [1, 4, 9], true) && $state === 4);
+        if (!$matches) {
+            return ['ok' => false, 'error' => 'Invoice state mismatch'];
+        }
+        return ['ok' => true, 'state' => $state, 'txid' => (string) $data['transactionIdentifier']];
     }
 }

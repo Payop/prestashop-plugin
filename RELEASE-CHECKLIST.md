@@ -9,7 +9,8 @@
 - Integration checks for invoice request field omission/inclusion and same-order switching.
 - Stored invoice/cart/order context, unknown invoice and invalid signature rejection.
 - Verified old-invoice success, repeated success, late failure and timeout, and paid-order protection.
-- JWT/API failure retention and no new JWT requirement for ordinary Hosted Page.
+- JWT/API failure retention for the catalogue; invoice creation and verified IPN work with missing/invalid JWT.
+- Legacy unsigned callback URL compatibility, invalid supplied signature rejection, and fail-closed invoice API verification.
 
 - Real project JWT catalogue retrieval: 31 available payment methods returned.
 

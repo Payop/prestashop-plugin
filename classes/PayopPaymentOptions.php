@@ -128,7 +128,7 @@ trait PayopPaymentOptions
     public function loadPaymentMethods($refresh = false)
     {
         $publicKey = trim((string) Configuration::get('PAYOP_PUBLIC_KEY'));
-        $token = $this->getApiToken();
+        $token = $this->getMethodsToken();
         $cached = $this->getCachedPaymentMethods();
         $cache = json_decode((string) Configuration::get('PAYOP_METHODS_CACHE'), true);
         $fingerprint = hash('sha256', $publicKey . '|' . $token);

@@ -23,8 +23,8 @@ Add the ability to accept payments in PrestaShop via Payop.com.
 The module supports PrestaShop 8.0+ and uses the native `PaymentOption` checkout integration. Use the PHP version supported by your PrestaShop installation. Version 2.4.0 was tested locally on PrestaShop 9.2.0 / PHP 8.3 and PrestaShop 8.2.8 / PHP 8.1; other target versions require a compatibility run before release.
 
 1. Enable Payop payments and configure the existing Display Name, Description, Public Key and Secret Key. These settings continue to control the original Payop Hosted Page option.
-2. Configure **JWT Token** once. The same token loads project payment methods and performs mandatory server-side transaction verification on IPN. Existing API JWT values are retained.
-3. To load the project payment method catalogue, save **JWT Token** and the Public Key, then click **Refresh saved project payment methods**. JWT is not required to create ordinary Hosted Page invoices; verified IPN still requires it. Refresh uses saved credentials and does not save unsaved edits.
+2. The optional **JWT Token** is used only to load the project payment method catalogue. Invoice creation and IPN payment verification do not use JWT. Existing saved JWT values are retained for catalogue loading.
+3. To load the project payment method catalogue, save **JWT Token** and the Public Key, then click **Refresh saved project payment methods**. JWT is not required to create invoices or verify IPN, and an absent/expired JWT cannot block payment confirmation. Refresh uses saved credentials and does not save unsaved edits.
 4. Under **Additional checkout payment buttons**, click **Add payment button**. Set Enabled, a customer title and description for each shop language, and select an integration type:
    - **Hosted Page**: shows all available methods and omits `paymentMethod` from the invoice request.
    - **Hosted Page with Payment Method ID**: select a project method from the dropdown. Selection is required for this type and the saved ID is sent as `paymentMethod`.
@@ -33,7 +33,7 @@ The module supports PrestaShop 8.0+ and uses the native `PaymentOption` checkout
 
 API errors show a warning and retain existing buttons and the last successfully loaded catalogue for the same project. Previously saved method IDs remain editable even if the catalogue is temporarily unavailable. New method IDs must be selected from the loaded project catalogue. The catalogue is cached for five minutes and can be refreshed explicitly.
 
-Set the Payop project **Callback/IPN URL** to the exact **Signed Callback URL** shown in the module settings. Changing the JWT does not change this URL.
+For new setups, use the **Signed Callback URL** shown in the module settings. Existing signed and legacy unsigned callback URLs remain supported after upgrade, without reconfiguration. If a signature is supplied, it must be valid. All callbacks require server-side invoice verification. Changing the JWT does not change the callback URL.
 
 ## Returning from Payop and IPN handling
 
@@ -41,7 +41,7 @@ PrestaShop creates the order before redirecting to Payop. When returning to chec
 
 Every issued invoice retains its order/cart, button and method context in `payop_invoice_history`. The current invoice pointer remains in `payop_order_meta`. Removing a button does not remove its invoice history. Invoice creation and IPN processing use the same cart lock to serialize concurrent payment attempts.
 
-Unknown invoices are rejected. IPN requires the signed callback URL, a stored order/cart/invoice association, a matching invoice-to-transaction API lookup, and the existing transaction verification (order ID, amount, currency, state and transaction ID). A verified successful payment of an earlier invoice can complete the existing order. Pending, failed or expired events for an earlier invoice do not change the current order attempt. An order that has already been paid cannot be downgraded by a later event, including after it moves to a shipping status. Repeated successful IPN does not create another order/payment or repeat the state transition. A browser return alone never changes payment state.
+Unknown invoices are rejected. IPN requires a stored order/cart/invoice association and a successful HTTPS lookup of the invoice at `/v1/invoices/{invoiceID}` without an Authorization header. The response must match the invoice ID, order ID, amount, currency, status and `transactionIdentifier`. Invoice status is mapped separately from transaction state. Callback data alone can never confirm payment; API errors fail closed for retry. Provided callback signatures are validated, while legacy unsigned callback URLs remain supported through the same full invoice verification. A verified successful payment of an earlier invoice can complete the existing order. Pending, failed or expired events for an earlier invoice do not change the current order attempt. An order that has already been paid cannot be downgraded by a later event, including after it moves to a shipping status. Repeated successful IPN does not create another order/payment or repeat the state transition. A browser return alone never changes payment state.
 
 **Do not pay multiple invoices for the same order.** If the customer pays two attempts, the module preserves their verified history and keeps the order paid; handling a duplicate charge/refund belongs to merchant reconciliation.
 
@@ -147,8 +147,9 @@ file that come with this project.
 = 2.4.0 =
 * Added unlimited additional checkout payment options with per-language customer titles and descriptions.
 * Added Hosted Page and Hosted Page with Payment Method ID integration types with conditional method selection.
-* Added project payment method discovery using the existing JWT, cached catalogue and recoverable API errors.
+* Added optional JWT for project payment method discovery only, cached catalogue and recoverable API errors.
 * Preserved the original Hosted Page and existing credentials/settings during upgrade.
 * Added immutable invoice history and same-order payment retries when changing a payment option.
-* Serialized invoice creation and IPN handling, rejected unknown invoices and verified invoice-to-transaction binding.
+* Serialized invoice creation and IPN handling, rejected unknown invoices and verified invoice/order/amount/currency/status/transaction through the invoice API without JWT.
+* Preserved existing callback URLs and ensured missing/expired catalogue JWT cannot block payment confirmation.
 * Prevented superseded failures/timeouts and repeated IPN from downgrading or duplicating an already paid order.

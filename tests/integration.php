@@ -22,11 +22,16 @@ class PaymentTestModule extends Payop
     public $lastInvoiceRequest = [];
     public $nextInvoiceId = '';
     public function createInvoice(array $request) { $this->lastInvoiceRequest = $request; return ['ok' => true, 'invoice_id' => $this->nextInvoiceId]; }
-    public $transaction = [];
+    public $invoiceDetails = [];
     public $invoiceMatches = true;
+    public $invoiceAvailable = true;
     public $methodsResponse = ['ok' => true, 'data' => []];
-    public function fetchTransaction($id) { return $this->transaction; }
-    public function verifyInvoiceTransaction(Order $order, $invoice, $transaction) { return $this->invoiceMatches; }
+    protected function requestInvoiceDetails($id) {
+        if (!$this->invoiceAvailable) return ['ok' => false];
+        $data = $this->invoiceDetails;
+        if (!$this->invoiceMatches) $data['identifier'] = 'mismatched-invoice';
+        return ['ok' => true, 'data' => $data];
+    }
     protected function requestPaymentMethods($application, $token) { return $this->methodsResponse; }
 }
 class PaymentTestResponse extends RuntimeException
@@ -72,7 +77,7 @@ try {
     config('PAYOP_PUBLIC_KEY', 'application-test');
     config('PAYOP_API_TOKEN', '');
     config('PAYOP_METHODS_TOKEN', 'legacy-methods-token');
-    check($module->getApiToken() === 'legacy-methods-token', 'legacy catalogue token remains usable when the existing API token is empty');
+    check($module->getMethodsToken() === 'legacy-methods-token', 'legacy catalogue token remains usable when the existing API token is empty');
     config('PAYOP_METHODS_TOKEN', '');
     config('PAYOP_BUTTONS', '[]');
     config('PAYOP_METHODS_CACHE', '');
@@ -190,10 +195,16 @@ try {
     $_SERVER['REQUEST_METHOD'] = 'POST';
     $_POST['signature'] = $module->getCallbackSignature();
     config('PS_MAIL_METHOD', 3);
+    config('PAYOP_API_TOKEN', '');
+    config('PAYOP_METHODS_TOKEN', '');
     $callback = new PaymentTestCallback($module);
     $send = function ($invoice, $state, $tx, $overrides = []) use ($module, $order, $callback) {
-        $module->transaction = ['ok' => true, 'orderId' => (string) $order->id, 'state' => $state, 'txid' => $tx, 'amount' => '10', 'currency' => (new Currency($order->id_currency))->iso_code];
-        $module->transaction = array_merge($module->transaction, $overrides);
+        $transaction = ['ok' => true, 'orderId' => (string) $order->id, 'state' => $state, 'txid' => $tx, 'amount' => '10', 'currency' => (new Currency($order->id_currency))->iso_code];
+        $transaction = array_merge($transaction, $overrides);
+        $statuses = [1 => 0, 2 => 1, 3 => 5, 4 => 4, 5 => 5, 9 => 4, 15 => 2];
+        $module->invoiceDetails = ['identifier' => $invoice, 'orderIdentifier' => $transaction['orderId'],
+            'amount' => $transaction['amount'], 'currency' => $transaction['currency'],
+            'status' => $statuses[$transaction['state']], 'transactionIdentifier' => $transaction['txid']];
         return $callback->dispatchTest(['transaction' => ['id' => $tx, 'state' => $state, 'order' => ['id' => $order->id]], 'invoice' => ['id' => $invoice, 'txid' => $tx]]);
     };
     check($send('unknown', 2, 'tx-unknown')[0] === 409, 'unknown invoice rejected before payment');
@@ -205,17 +216,24 @@ try {
     check($send($oldInvoice, 2, 'tx-old', ['orderId' => '0'])[0] === 409, 'wrong transaction order rejected');
     check($send($oldInvoice, 2, 'tx-old', ['state' => 3])[0] === 409, 'wrong transaction state rejected');
     check($send($oldInvoice, 2, 'tx-old', ['txid' => 'other'])[0] === 409, 'wrong transaction identifier rejected');
+    $module->invoiceAvailable = false;
+    check($send($oldInvoice, 2, 'tx-old')[0] === 409, 'invoice API failure never falls back to trusting the IPN');
+    $module->invoiceAvailable = true;
     $module->invoiceMatches = false;
     check($send($oldInvoice, 2, 'tx-old')[0] === 409, 'invoice-to-transaction mismatch rejected');
     $module->invoiceMatches = true;
-    check($send($oldInvoice, 3, 'tx-old')[0] === 200, 'late failure acknowledged');
+    unset($_POST['signature']);
+    check($send('unknown-legacy', 2, 'tx-unknown')[0] === 409, 'unsigned legacy callback still rejects unknown invoices');
+    check($send($oldInvoice, 3, 'tx-old')[0] === 200, 'legacy unsigned callback verified without JWT or URL reconfiguration');
+    $_POST['signature'] = $module->getCallbackSignature();
     check((int) (new Order($order->id))->current_state === (int) $order->current_state, 'late failure does not cancel current attempt');
     check($send($oldInvoice, 15, 'tx-old')[0] === 200 && (int) (new Order($order->id))->current_state === (int) $order->current_state, 'late timeout does not cancel current attempt');
-    check($send($oldInvoice, 2, 'tx-old')[0] === 200, 'late success for known invoice accepted after verification');
+    check($send($oldInvoice, 2, 'tx-old')[0] === 200, 'late success for known invoice verified without JWT');
     check((int) (new Order($order->id))->current_state === (int) Configuration::get('PS_OS_PAYMENT'), 'verified late success pays the existing order');
     $payments = (int) $db->getValue("SELECT COUNT(*) FROM " . _DB_PREFIX_ . "order_payment WHERE order_reference='" . pSQL($order->reference) . "'");
     $history = (int) $db->getValue('SELECT COUNT(*) FROM ' . _DB_PREFIX_ . 'order_history WHERE id_order=' . (int) $order->id);
-    check($send($oldInvoice, 2, 'tx-old')[0] === 200, 'duplicate success acknowledged');
+    config('PAYOP_API_TOKEN', 'invalid-expired-jwt');
+    check($send($oldInvoice, 2, 'tx-old')[0] === 200, 'duplicate success verified even with an invalid JWT');
     check($payments === (int) $db->getValue("SELECT COUNT(*) FROM " . _DB_PREFIX_ . "order_payment WHERE order_reference='" . pSQL($order->reference) . "'") && $history === (int) $db->getValue('SELECT COUNT(*) FROM ' . _DB_PREFIX_ . 'order_history WHERE id_order=' . (int) $order->id), 'duplicate IPN creates no extra payments or state actions');
     check($send($newInvoice, 3, 'tx-new')[0] === 200 && (int) (new Order($order->id))->current_state === (int) Configuration::get('PS_OS_PAYMENT'), 'current failure cannot downgrade a paid order');
     $shippingOrder = new Order($order->id);

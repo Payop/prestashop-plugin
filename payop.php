@@ -111,7 +111,7 @@ class Payop extends PaymentModule
 			'description' => Configuration::get('DESCRIPTION'),
 			'publicKey' => Configuration::get('PAYOP_PUBLIC_KEY'),
 			'secretKey' => Configuration::get('PAYOP_SECRET_KEY'),
-			'apiToken' => $this->getApiToken(),
+			'apiToken' => $this->getMethodsToken(),
 			'callbackUrl' => $this->getCallbackUrl(),
 			'payop_settings_token' => $this->getSettingsToken(),
 			'payop_buttons_json' => json_encode($this->getAdditionalButtons()),
@@ -265,15 +265,10 @@ class Payop extends PaymentModule
 		], '', '&');
 	}
 
-	public function getApiToken()
+	public function getMethodsToken()
 	{
 		$token = trim((string) Configuration::get('PAYOP_API_TOKEN'));
 		return $token !== '' ? $token : trim((string) Configuration::get('PAYOP_METHODS_TOKEN'));
-	}
-
-	public function hasApiToken()
-	{
-		return $this->getApiToken() !== '';
 	}
 
 	public function generateFailSignature($orderId, $cartId, $secureKey)
@@ -357,163 +352,6 @@ class Payop extends PaymentModule
 		);
 	}
 
-	public function fetchTransaction($transactionId)
-	{
-		$token = $this->getApiToken();
-		$transactionId = trim((string) $transactionId);
-
-		if ($transactionId === '') {
-			return [
-				'ok' => false,
-				'error' => 'Empty txid',
-			];
-		}
-
-		if ($token === '') {
-			PrestaShopLogger::addLog('[Payop] Missing API token for transaction verification.');
-			return [
-				'ok' => false,
-				'error' => 'Missing JWT token in plugin settings',
-			];
-		}
-
-		$ch = curl_init('https://api.payop.com/v2/transactions/' . rawurlencode($transactionId));
-		curl_setopt($ch, CURLOPT_HTTPGET, true);
-		curl_setopt($ch, CURLOPT_HTTPHEADER, [
-			'Accept: application/json',
-			'Content-Type: application/json',
-			'Authorization: Bearer ' . $token,
-		]);
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-		curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-
-		$result = curl_exec($ch);
-		$httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		$error = curl_error($ch);
-		curl_close($ch);
-
-		if ($result === false || $error) {
-			PrestaShopLogger::addLog('[Payop] Transaction verification failed: ' . $error);
-			return [
-				'ok' => false,
-				'error' => $error !== '' ? $error : 'Transaction verification request failed',
-			];
-		}
-
-		$response = json_decode($result, true);
-		if ($httpCode !== 200 || !is_array($response)) {
-			PrestaShopLogger::addLog('[Payop] Unexpected transaction verification response. HTTP code: ' . $httpCode);
-			return [
-				'ok' => false,
-				'error' => 'Invalid Payop API response',
-				'http' => $httpCode,
-				'body' => $this->truncateApiResponse($result),
-			];
-		}
-
-		$data = isset($response['data']) && is_array($response['data']) ? $response['data'] : null;
-		if (!is_array($data)) {
-			return [
-				'ok' => false,
-				'error' => 'Missing data in Payop API response',
-				'raw' => $response,
-			];
-		}
-
-		return [
-			'ok' => true,
-			'raw' => $response,
-			'data' => $data,
-			'state' => (int) (isset($data['state']) ? $data['state'] : 0),
-			'amount' => (string) (isset($data['productAmount']) ? $data['productAmount'] : (isset($data['amount']) ? $data['amount'] : '')),
-			'currency' => (string) (isset($data['productCurrency']) ? $data['productCurrency'] : (isset($data['currency']) ? $data['currency'] : '')),
-			'orderId' => (string) (isset($data['orderId']) ? $data['orderId'] : (isset($data['orderIdentifier']) ? $data['orderIdentifier'] : (isset($data['order']['id']) ? $data['order']['id'] : ''))),
-			'txid' => (string) (isset($data['identifier']) ? $data['identifier'] : (isset($data['id']) ? $data['id'] : (isset($data['transactionId']) ? $data['transactionId'] : $transactionId))),
-		];
-	}
-
-	public function verifyTransactionForOrder(array $transaction, Order $order, $expectedState = null, $expectedTransactionId = null)
-	{
-		if (empty($transaction['ok'])) {
-			return [
-				'ok' => false,
-				'error' => isset($transaction['error']) ? $transaction['error'] : 'Transaction fetch failed',
-			];
-		}
-
-		$orderIdentifier = (string) (isset($transaction['orderId']) ? $transaction['orderId'] : '');
-
-		if ($orderIdentifier !== (string) $order->id) {
-			return [
-				'ok' => false,
-				'error' => 'OrderId mismatch',
-				'expected' => (string) $order->id,
-				'actual' => $orderIdentifier,
-			];
-		}
-
-		$currency = new Currency((int) $order->id_currency);
-		$transactionAmount = number_format((float) (isset($transaction['amount']) ? $transaction['amount'] : 0), 4, '.', '');
-		$orderAmount = number_format((float) $order->total_paid, 4, '.', '');
-
-		if ($transactionAmount !== $orderAmount) {
-			return [
-				'ok' => false,
-				'error' => 'Amount mismatch',
-				'expected' => $orderAmount,
-				'actual' => $transactionAmount,
-			];
-		}
-
-		$transactionCurrency = Tools::strtoupper((string) (isset($transaction['currency']) ? $transaction['currency'] : ''));
-		$orderCurrency = Tools::strtoupper((string) $currency->iso_code);
-		if ($transactionCurrency !== $orderCurrency) {
-			return [
-				'ok' => false,
-				'error' => 'Currency mismatch',
-				'expected' => $orderCurrency,
-				'actual' => $transactionCurrency,
-			];
-		}
-
-		$transactionState = (int) (isset($transaction['state']) ? $transaction['state'] : -1);
-		if ($expectedState !== null && $transactionState !== (int) $expectedState) {
-			return [
-				'ok' => false,
-				'error' => 'State mismatch',
-				'expected' => (int) $expectedState,
-				'actual' => $transactionState,
-			];
-		}
-
-		$transactionIdentifier = (string) (isset($transaction['txid']) ? $transaction['txid'] : '');
-
-		if ($expectedTransactionId !== null && $transactionIdentifier !== (string) $expectedTransactionId) {
-			return [
-				'ok' => false,
-				'error' => 'TransactionId mismatch',
-				'expected' => (string) $expectedTransactionId,
-				'actual' => $transactionIdentifier,
-			];
-		}
-
-		return [
-			'ok' => true,
-			'txid' => $transactionIdentifier,
-			'raw' => isset($transaction['raw']) ? $transaction['raw'] : null,
-		];
-	}
-
-	public function isVerifiedTransactionForOrder(array $transaction, Order $order, $expectedState = null, $expectedTransactionId = null)
-	{
-		$verification = $this->verifyTransactionForOrder($transaction, $order, $expectedState, $expectedTransactionId);
-
-		return !empty($verification['ok']);
-	}
-
 	public function getFrontControllerUrl($controller, array $params = [])
 	{
 		$query = array_merge([
@@ -528,16 +366,6 @@ class Payop extends PaymentModule
 	private function getStorageTableName()
 	{
 		return _DB_PREFIX_ . self::ORDER_META_TABLE;
-	}
-
-	private function truncateApiResponse($body)
-	{
-		$body = (string) $body;
-		if (function_exists('mb_substr')) {
-			return mb_substr($body, 0, 1000);
-		}
-
-		return substr($body, 0, 1000);
 	}
 
 	private function getShopBaseUrl()

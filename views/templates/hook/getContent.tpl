@@ -54,8 +54,8 @@
 				<div class="form-group clearfix">
 					<label class="col-lg-3">{l s='JWT Token' mod='payop'}</label>
 					<div class="col-lg-9">
-						<input type="password" id="apiToken" name="apiToken" value="{if isset($apiToken)}{$apiToken|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Used for payment methods and transaction verification' mod='payop'}" autocomplete="new-password"/>
-						<p class="help-block">{l s='Use one Payop JWT token to load payment methods and verify callbacks. Creating an ordinary Hosted Page invoice does not require JWT.' mod='payop'}</p>
+						<input type="password" id="apiToken" name="apiToken" value="{if isset($apiToken)}{$apiToken|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Used only to load project payment methods' mod='payop'}" autocomplete="new-password"/>
+						<p class="help-block">{l s='JWT is used only to load available project payment methods. Invoice creation and payment verification work without JWT.' mod='payop'}</p>
 					</div>
 				</div>
 
