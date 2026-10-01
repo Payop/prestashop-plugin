@@ -76,7 +76,7 @@ class Payop extends PaymentModule
 		}
 		try {
 			$buttons = $this->validateButtons(Tools::getValue('payop_buttons_json', '[]'));
-			foreach (['enablePayments', 'displayName', 'description', 'publicKey', 'secretKey', 'apiToken', 'methodsToken'] as $field) {
+			foreach (['enablePayments', 'displayName', 'description', 'publicKey', 'secretKey', 'apiToken'] as $field) {
 				if (!is_scalar(Tools::getValue($field, ''))) {
 					throw new InvalidArgumentException($this->l('Invalid settings value.'));
 				}
@@ -86,9 +86,11 @@ class Payop extends PaymentModule
 			return;
 		}
 		Configuration::updateValue('PAYOP_ENABLE', (int) Tools::getValue('enablePayments'));
-		foreach (['PAYOP_NAME' => 'displayName', 'DESCRIPTION' => 'description', 'PAYOP_PUBLIC_KEY' => 'publicKey', 'PAYOP_SECRET_KEY' => 'secretKey', 'PAYOP_API_TOKEN' => 'apiToken', 'PAYOP_METHODS_TOKEN' => 'methodsToken'] as $key => $field) {
+		foreach (['PAYOP_NAME' => 'displayName', 'DESCRIPTION' => 'description', 'PAYOP_PUBLIC_KEY' => 'publicKey', 'PAYOP_SECRET_KEY' => 'secretKey', 'PAYOP_API_TOKEN' => 'apiToken'] as $key => $field) {
 			Configuration::updateValue($key, trim((string) Tools::getValue($field, '')));
 		}
+		// Once the unified field is saved, do not revive a hidden legacy token.
+		Configuration::updateValue('PAYOP_METHODS_TOKEN', '');
 		Configuration::updateValue('PAYOP_BUTTONS', json_encode($buttons));
 		$this->getCallbackSignature();
 		$this->context->smarty->assign('confirmation', 'ok');
@@ -109,8 +111,7 @@ class Payop extends PaymentModule
 			'description' => Configuration::get('DESCRIPTION'),
 			'publicKey' => Configuration::get('PAYOP_PUBLIC_KEY'),
 			'secretKey' => Configuration::get('PAYOP_SECRET_KEY'),
-			'apiToken' => Configuration::get('PAYOP_API_TOKEN'),
-			'methodsToken' => Configuration::get('PAYOP_METHODS_TOKEN'),
+			'apiToken' => $this->getApiToken(),
 			'callbackUrl' => $this->getCallbackUrl(),
 			'payop_settings_token' => $this->getSettingsToken(),
 			'payop_buttons_json' => json_encode($this->getAdditionalButtons()),
@@ -264,9 +265,15 @@ class Payop extends PaymentModule
 		], '', '&');
 	}
 
+	public function getApiToken()
+	{
+		$token = trim((string) Configuration::get('PAYOP_API_TOKEN'));
+		return $token !== '' ? $token : trim((string) Configuration::get('PAYOP_METHODS_TOKEN'));
+	}
+
 	public function hasApiToken()
 	{
-		return trim((string) Configuration::get('PAYOP_API_TOKEN')) !== '';
+		return $this->getApiToken() !== '';
 	}
 
 	public function generateFailSignature($orderId, $cartId, $secureKey)
@@ -352,7 +359,7 @@ class Payop extends PaymentModule
 
 	public function fetchTransaction($transactionId)
 	{
-		$token = trim((string) Configuration::get('PAYOP_API_TOKEN'));
+		$token = $this->getApiToken();
 		$transactionId = trim((string) $transactionId);
 
 		if ($transactionId === '') {

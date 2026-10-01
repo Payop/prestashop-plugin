@@ -52,10 +52,10 @@
 				</div>
 
 				<div class="form-group clearfix">
-					<label class="col-lg-3">{l s='API JWT Token' mod='payop'}</label>
+					<label class="col-lg-3">{l s='JWT Token' mod='payop'}</label>
 					<div class="col-lg-9">
-						<input type="password" id="apiToken" name="apiToken" value="{if isset($apiToken)}{$apiToken|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Used for server-side transaction verification' mod='payop'}" autocomplete="new-password"/>
-						<p class="help-block">{l s='Create a Bearer token in the Payop dashboard and paste it here for callback verification.' mod='payop'}</p>
+						<input type="password" id="apiToken" name="apiToken" value="{if isset($apiToken)}{$apiToken|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Used for payment methods and transaction verification' mod='payop'}" autocomplete="new-password"/>
+						<p class="help-block">{l s='Use one Payop JWT token to load payment methods and verify callbacks. Creating an ordinary Hosted Page invoice does not require JWT.' mod='payop'}</p>
 					</div>
 				</div>
 
@@ -69,10 +69,8 @@
 
 
                 <div class="form-group clearfix">
-                    <label class="col-lg-3">{l s='Payment Methods JWT Token' mod='payop'}</label>
+                    <label class="col-lg-3">{l s='Project payment methods' mod='payop'}</label>
                     <div class="col-lg-9">
-                        <input type="password" name="methodsToken" value="{$methodsToken|escape:'htmlall':'UTF-8'}" autocomplete="new-password" />
-                        <p class="help-block">{l s='Used only to load the project payment methods. Optional for ordinary Hosted Page. The API JWT Token above keeps its existing transaction verification role.' mod='payop'}</p>
                         <button class="btn btn-default" name="payop_refresh_methods" value="1" type="submit" formnovalidate>{l s='Refresh saved project payment methods' mod='payop'}</button>
                         <p class="help-block">{l s='Save credentials first, then refresh. Refresh does not save unsaved form changes.' mod='payop'}</p>
                         {if !empty($payop_methods_error)}<div class="alert alert-warning">{$payop_methods_error|escape:'htmlall':'UTF-8'}</div>{/if}

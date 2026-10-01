@@ -128,7 +128,7 @@ trait PayopPaymentOptions
     public function loadPaymentMethods($refresh = false)
     {
         $publicKey = trim((string) Configuration::get('PAYOP_PUBLIC_KEY'));
-        $token = trim((string) Configuration::get('PAYOP_METHODS_TOKEN'));
+        $token = $this->getApiToken();
         $cached = $this->getCachedPaymentMethods();
         $cache = json_decode((string) Configuration::get('PAYOP_METHODS_CACHE'), true);
         $fingerprint = hash('sha256', $publicKey . '|' . $token);
@@ -136,7 +136,7 @@ trait PayopPaymentOptions
             return ['ok' => true, 'methods' => $cached];
         }
         if ($publicKey === '' || $token === '') {
-            return ['ok' => false, 'methods' => $cached, 'error' => $this->l('Save the Public Key and Payment Methods JWT Token to load methods. Ordinary Hosted Page does not require this token.')];
+            return ['ok' => false, 'methods' => $cached, 'error' => $this->l('Save the Public Key and JWT Token to load methods. Ordinary Hosted Page does not require this token.')];
         }
         $applicationId = preg_replace('/^application-/', '', $publicKey);
         $response = $this->requestPaymentMethods($applicationId, $token);

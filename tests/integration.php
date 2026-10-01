@@ -70,7 +70,9 @@ try {
     config('PAYOP_ENABLE', 1);
     config('PAYOP_NAME', 'Payop');
     config('PAYOP_PUBLIC_KEY', 'application-test');
-    config('PAYOP_API_TOKEN', 'test-verification-token');
+    config('PAYOP_API_TOKEN', '');
+    config('PAYOP_METHODS_TOKEN', 'legacy-methods-token');
+    check($module->getApiToken() === 'legacy-methods-token', 'legacy catalogue token remains usable when the existing API token is empty');
     config('PAYOP_METHODS_TOKEN', '');
     config('PAYOP_BUTTONS', '[]');
     config('PAYOP_METHODS_CACHE', '');
@@ -80,7 +82,7 @@ try {
     check(count($module->hookPaymentOptions()) === 1, 'legacy Hosted Page works without methods JWT');
     check(!isset($module->applyInvoicePaymentMethod(['paymentMethod' => '999'], $module->resolvePaymentButton('default'))['paymentMethod']), 'Hosted Page omits paymentMethod');
     check(empty($module->loadPaymentMethods()['ok']), 'missing methods JWT produces a clear warning');
-    config('PAYOP_METHODS_TOKEN', 'test-methods-token');
+    config('PAYOP_API_TOKEN', 'test-shared-token');
     $module->methodsResponse = ['ok' => true, 'data' => [['identifier' => 100, 'title' => 'Crypto'], ['identifier' => 200, 'title' => 'Revolut']]];
     check($module->loadPaymentMethods(true)['ok'], 'project payment method catalogue loads');
     $buttons = [];

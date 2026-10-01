@@ -147,7 +147,7 @@ trait PayopInvoiceHistory
     public function verifyInvoiceTransaction(Order $order, $invoiceId, $transactionId)
     {
         $ch = curl_init('https://api.payop.com/v1/invoices/' . rawurlencode($invoiceId));
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_SSL_VERIFYPEER => true, CURLOPT_HTTPHEADER => ['Accept: application/json', 'Authorization: Bearer ' . trim((string) Configuration::get('PAYOP_API_TOKEN'))]]);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_SSL_VERIFYPEER => true, CURLOPT_HTTPHEADER => ['Accept: application/json', 'Authorization: Bearer ' . $this->getApiToken()]]);
         $body = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);

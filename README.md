@@ -23,8 +23,8 @@ Add the ability to accept payments in PrestaShop via Payop.com.
 The module supports PrestaShop 8.0+ and uses the native `PaymentOption` checkout integration. Use the PHP version supported by your PrestaShop installation. Version 2.4.0 was tested locally on PrestaShop 9.2.0 / PHP 8.3 and PrestaShop 8.2.8 / PHP 8.1; other target versions require a compatibility run before release.
 
 1. Enable Payop payments and configure the existing Display Name, Description, Public Key and Secret Key. These settings continue to control the original Payop Hosted Page option.
-2. Keep **API JWT Token** configured for mandatory server-side transaction verification on IPN. Its role and existing value are unchanged.
-3. To load the project payment method catalogue, save **Payment Methods JWT Token** and the Public Key, then click **Refresh saved project payment methods**. This separate token is used only for the catalogue; it is optional for the original Hosted Page and additional ordinary Hosted Page buttons. Refresh uses saved credentials and does not save unsaved edits.
+2. Configure **JWT Token** once. The same token loads project payment methods and performs mandatory server-side transaction verification on IPN. Existing API JWT values are retained.
+3. To load the project payment method catalogue, save **JWT Token** and the Public Key, then click **Refresh saved project payment methods**. JWT is not required to create ordinary Hosted Page invoices; verified IPN still requires it. Refresh uses saved credentials and does not save unsaved edits.
 4. Under **Additional checkout payment buttons**, click **Add payment button**. Set Enabled, a customer title and description for each shop language, and select an integration type:
    - **Hosted Page**: shows all available methods and omits `paymentMethod` from the invoice request.
    - **Hosted Page with Payment Method ID**: select a project method from the dropdown. Selection is required for this type and the saved ID is sent as `paymentMethod`.
@@ -33,7 +33,7 @@ The module supports PrestaShop 8.0+ and uses the native `PaymentOption` checkout
 
 API errors show a warning and retain existing buttons and the last successfully loaded catalogue for the same project. Previously saved method IDs remain editable even if the catalogue is temporarily unavailable. New method IDs must be selected from the loaded project catalogue. The catalogue is cached for five minutes and can be refreshed explicitly.
 
-Set the Payop project **Callback/IPN URL** to the exact **Signed Callback URL** shown in the module settings. Changing the new catalogue JWT does not change this URL.
+Set the Payop project **Callback/IPN URL** to the exact **Signed Callback URL** shown in the module settings. Changing the JWT does not change this URL.
 
 ## Returning from Payop and IPN handling
 
@@ -147,7 +147,7 @@ file that come with this project.
 = 2.4.0 =
 * Added unlimited additional checkout payment options with per-language customer titles and descriptions.
 * Added Hosted Page and Hosted Page with Payment Method ID integration types with conditional method selection.
-* Added a separate optional JWT for project payment method discovery, cached catalogue and recoverable API errors.
+* Added project payment method discovery using the existing JWT, cached catalogue and recoverable API errors.
 * Preserved the original Hosted Page and existing credentials/settings during upgrade.
 * Added immutable invoice history and same-order payment retries when changing a payment option.
 * Serialized invoice creation and IPN handling, rejected unknown invoices and verified invoice-to-transaction binding.

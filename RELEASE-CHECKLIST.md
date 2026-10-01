@@ -11,9 +11,11 @@
 - Verified old-invoice success, repeated success, late failure and timeout, and paid-order protection.
 - JWT/API failure retention and no new JWT requirement for ordinary Hosted Page.
 
+- Real project JWT catalogue retrieval: 31 available payment methods returned.
+
 ## Required before publication
 
-- Real project JWT catalogue retrieval and redirects for each configured payment method.
+- Real Hosted Page redirects for each configured payment method.
 - Real signed IPN using a public HTTPS test shop, including duplicate and delayed events.
 - Guest and registered-customer checkout/Back/retry in each supported theme.
 - Compatibility run on any additional PrestaShop/PHP versions targeted by the release.
