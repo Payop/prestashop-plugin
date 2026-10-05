@@ -1,10 +1,16 @@
 {if isset($confirmation)}
 	<div class="alert alert-success">{l s='Settings updated' mod='payop'}</div>
 {/if}
+{if !empty($payop_error)}<div class="alert alert-danger">{$payop_error|escape:'htmlall':'UTF-8'}</div>{/if}
+{if !empty($payop_notice)}<div class="alert alert-info">{$payop_notice|escape:'htmlall':'UTF-8'}</div>{/if}
 <fieldset>
 	<h2>{l s='Payop configuration' mod='payop'}</h2>
 	<div class="panel">
-		<form id="data" action="" method="post">
+		<form id="payop-settings-form" action="" method="post">
+            <input type="hidden" name="payop_settings_token" value="{$payop_settings_token|escape:'htmlall':'UTF-8'}" />
+            <input type="hidden" id="payop-buttons-json" name="payop_buttons_json" value="{$payop_buttons_json|escape:'htmlall':'UTF-8'}" />
+            <textarea id="payop-editor-data" hidden style="display: none !important;">{$payop_editor_json|escape:'htmlall':'UTF-8'}</textarea>
+
 			<div class="form-group clearfix">
 				<label class="col-lg-3">{l s='Enable Payop payments' mod='payop'}</label>
 				<div class="col-lg-9">
@@ -46,10 +52,10 @@
 				</div>
 
 				<div class="form-group clearfix">
-					<label class="col-lg-3">{l s='API JWT Token' mod='payop'}</label>
+					<label class="col-lg-3">{l s='JWT Token' mod='payop'}</label>
 					<div class="col-lg-9">
-						<input type="password" id="apiToken" name="apiToken" value="{if isset($apiToken)}{$apiToken|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Used for server-side transaction verification' mod='payop'}" autocomplete="new-password"/>
-						<p class="help-block">{l s='Create a Bearer token in the Payop dashboard and paste it here for callback verification.' mod='payop'}</p>
+						<input type="password" id="apiToken" name="apiToken" value="{if isset($apiToken)}{$apiToken|escape:'htmlall':'UTF-8'}{/if}" placeholder="{l s='Used only to load project payment methods' mod='payop'}" autocomplete="new-password"/>
+						<p class="help-block">{l s='JWT is used only to load available project payment methods. Invoice creation and payment verification work without JWT.' mod='payop'}</p>
 					</div>
 				</div>
 
@@ -61,6 +67,21 @@
 					</div>
 				</div>
 
+
+                <div class="form-group clearfix">
+                    <label class="col-lg-3">{l s='Project payment methods' mod='payop'}</label>
+                    <div class="col-lg-9">
+                        <button class="btn btn-default" name="payop_refresh_methods" value="1" type="submit" formnovalidate>{l s='Refresh saved project payment methods' mod='payop'}</button>
+                        <p class="help-block">{l s='Save credentials first, then refresh. Refresh does not save unsaved form changes.' mod='payop'}</p>
+                        {if !empty($payop_methods_error)}<div class="alert alert-warning">{$payop_methods_error|escape:'htmlall':'UTF-8'}</div>{/if}
+                    </div>
+                </div>
+                <hr />
+                <h3>{l s='Additional checkout payment buttons' mod='payop'}</h3>
+                <p>{l s='The existing Payop Hosted Page remains available. All additional buttons share the project keys and module settings.' mod='payop'}</p>
+                <div id="payop-buttons-editor"></div>
+                <button class="btn btn-default" id="payop-add-button" type="button">{l s='Add payment button' mod='payop'}</button>
+                <noscript><p>{l s='Enable JavaScript to edit additional buttons. Existing buttons will be preserved.' mod='payop'}</p></noscript>
 			<div class="panel-footer">
 				<input class="btn btn-default pull-right" type="submit" name="pc_form" value="{l s='Save' mod='payop'}" />
 			</div>

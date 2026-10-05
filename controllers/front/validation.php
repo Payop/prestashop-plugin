@@ -5,42 +5,62 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 
 	public function postProcess()
 	{
-		$context = $this->context;
-		$cart = $context->cart;
-		$cartId = $cart->id;
-		$customer = new Customer($cart->id_customer);
+		$button = $this->module->resolvePaymentButton(Tools::getValue('payop_option', 'default'));
+		if (!$this->module->active || !(bool) Configuration::get('PAYOP_ENABLE') || !$button) {
+			header('HTTP/1.1 400 Bad Request');
+			exit('Payment option is unavailable.');
+		}
+		$retryOrderId = (int) Tools::getValue('id_order');
+		$retryFromCookie = false;
+		if (!$retryOrderId && !(int) $this->context->cart->id) {
+			$retryOrderId = (int) $this->context->cookie->payop_retry_order;
+			$retryFromCookie = $retryOrderId > 0;
+		}
+		if ($retryOrderId) {
+			$order = new Order($retryOrderId);
+			$key = Tools::getValue('key');
+			$signature = Tools::getValue('signature');
+			if (!Validate::isLoadedObject($order) || $order->module !== $this->module->name
+				|| (!$retryFromCookie && (!is_string($key) || !is_string($signature)
+					|| !hash_equals((string) $order->secure_key, $key)
+					|| !hash_equals($this->module->generateFailSignature($order->id, $order->id_cart, $key), $signature)))
+				|| (int) $order->id_customer !== (int) $this->context->customer->id) {
+				header('HTTP/1.1 403 Forbidden');
+				exit('Invalid payment retry.');
+			}
+			$cart = new Cart((int) $order->id_cart);
+		} else {
+			$cart = $this->context->cart;
+		}
+		$cartId = (int) $cart->id;
+		$customer = new Customer((int) $cart->id_customer);
 		$language = Configuration::get('PAYOP_LANGUAGE') ?: 'en';
-
-		if (!$this->module->active || !(bool) Configuration::get('PAYOP_ENABLE') || $cart->id_customer == 0 || $cart->id_address_delivery == 0 || $cart->id_address_invoice  == 0) {
+		if (!Validate::isLoadedObject($cart) || !Validate::isLoadedObject($customer)
+			|| (int) $cart->id_customer !== (int) $this->context->customer->id
+			|| !$cart->id_address_delivery || !$cart->id_address_invoice) {
 			Tools::redirect('index.php?controller=order&step=1');
 		}
-
-		$customer = new Customer($cart->id_customer);
-		if (!Validate::isLoadedObject($customer)) {
-			Tools::redirect('index.php?controller=order&step=1');
+		if (!$this->module->acquireCartLock($cartId)) {
+			header('HTTP/1.1 409 Conflict');
+			exit('Payment is being processed. Please retry shortly.');
 		}
-
-		// Create order in PrestaShop
-		$this->module->validateOrder(
-			(int) $this->context->cart->id,
-			Configuration::get('PS_OS_PAYOP_PENDING_STATE'),
-			(float) $this->context->cart->getOrderTotal(true, Cart::BOTH),
-			$this->module->displayName,
-			null,
-			null,
-			(int) $this->context->currency->id,
-			false,
-			$customer->secure_key
-		);
-
-		$idOrder = (int) $this->module->currentOrder;
-
-		if (!$idOrder) {
-			Tools::redirect('index.php?controller=order&step=1');
-		}
-
+		$idOrder = 0;
 		try {
+			$idOrder = (int) Order::getIdByCartId($cartId);
+			if (!$idOrder) {
+				$this->context->cart = $cart;
+				$this->module->validateOrder($cartId, Configuration::get('PS_OS_PAYOP_PENDING_STATE'),
+					(float) $cart->getOrderTotal(true, Cart::BOTH), $this->module->displayName,
+					null, null, (int) $cart->id_currency, false, $customer->secure_key);
+				$idOrder = (int) $this->module->currentOrder;
+			}
 			$order = new Order($idOrder);
+			if (!Validate::isLoadedObject($order) || $order->module !== $this->module->name
+				|| (int) $order->id_customer !== (int) $customer->id || $this->module->isOrderSettled($order)) {
+				throw new Exception('Order is not available for another payment attempt.');
+			}
+			$this->context->cookie->payop_retry_order = $idOrder;
+			$this->context->cookie->write();
 			$address = new Address($cart->id_address_delivery);
 			$currency = Currency::getCurrency($order->id_currency);
 			$failUrl = $this->module->getFailUrl($idOrder, (int) $cart->id, $customer->secure_key);
@@ -62,10 +82,10 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 			$request = [
 				'publicKey' => Configuration::get('PAYOP_PUBLIC_KEY'),
 				'order' => [
-					'id' => (string) $this->module->currentOrder,
+					'id' => (string) $idOrder,
 					'amount' => number_format((float) $order->total_paid, 2, '.', ''),
 					'currency' => $currency['iso_code'],
-					'description' => 'Payment order #' . $this->module->currentOrder,
+					'description' => 'Payment order #' . $idOrder,
 					'items' => $items,
 				],
 				'payer' => [
@@ -79,7 +99,7 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 				'resultUrl' => $successUrl,
 				'failPath' => $failUrl,
 				'signature' => $this->generateSignature(
-					(string) $this->module->currentOrder,
+					(string) $idOrder,
 					(float) $order->total_paid,
 					$currency['iso_code'],
 					Configuration::get('PAYOP_SECRET_KEY')
@@ -87,63 +107,29 @@ class PayopValidationModuleFrontController extends ModuleFrontController
 				'language' => $language,
 			];
 
-			// Send request to Payop API
-			$url = 'https://api.payop.com/v1/invoices/create';
-			$ch = curl_init($url);
-			$responseHeaders = [];
-			curl_setopt($ch, CURLOPT_POST, 1);
-			curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($request));
-			curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($curl, $headerLine) use (&$responseHeaders) {
-				$headerLength = strlen($headerLine);
-				$headerParts = explode(':', $headerLine, 2);
-				if (count($headerParts) === 2) {
-					$responseHeaders[Tools::strtolower(trim($headerParts[0]))] = trim($headerParts[1]);
-				}
+			$request = $this->module->applyInvoicePaymentMethod($request, $button);
 
-				return $headerLength;
-			});
-			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-			curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-			$result = curl_exec($ch);
-			$httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-			$curlError = curl_error($ch);
-			curl_close($ch);
-
-			$response = json_decode($result, true);
-
-			// Redirect user to payment page or failure page
-				$invoiceId = '';
-				if (!empty($responseHeaders['identifier'])) {
-					$invoiceId = (string) $responseHeaders['identifier'];
-				} elseif (isset($response['data']) && !is_array($response['data'])) {
-					$invoiceId = (string) $response['data'];
-				} elseif (!empty($response['data']['id'])) {
-					$invoiceId = (string) $response['data']['id'];
-				}
-
-			if ($httpCode >= 200 && $httpCode < 300 && $invoiceId !== '') {
-				if (!$this->module->saveOrderMeta($idOrder, (int) $cart->id, $invoiceId)) {
-					throw new Exception('Unable to persist Payop invoice metadata.');
-				}
-
-				Tools::redirect('https://checkout.payop.com/' . $language . '/payment/invoice-preprocessing/' . $invoiceId);
-			} else {
-				if ($curlError) {
-					PrestaShopLogger::addLog('[Payop] Invoice creation failed: ' . $curlError);
-				} else {
-					PrestaShopLogger::addLog('[Payop] Unexpected invoice creation response. HTTP code: ' . $httpCode);
-				}
-
-				Tools::redirect($failUrl);
+			$invoice = $this->module->createInvoice($request);
+			if (empty($invoice['ok'])) {
+				throw new RuntimeException('Payop invoice creation failed.');
 			}
-		} catch (Exception $e) {
+			$invoiceId = $invoice['invoice_id'];
+			if (!$this->module->rememberInvoice($idOrder, $cartId, $invoiceId, $button)) {
+				throw new RuntimeException('Unable to persist Payop invoice metadata.');
+			}
+			$this->module->releaseCartLock($cartId);
+			return $this->redirectPayment('https://checkout.payop.com/' . rawurlencode($language) . '/payment/invoice-preprocessing/' . rawurlencode($invoiceId));
+
+		} catch (Throwable $e) {
 			PrestaShopLogger::addLog("[Payop] Exception: " . $e->getMessage());
-			Tools::redirect($this->module->getFailUrl($idOrder, (int) $cartId, $customer->secure_key));
+			$this->module->releaseCartLock($cartId);
+			return $this->redirectPayment($this->module->getFailUrl($idOrder, (int) $cartId, $customer->secure_key));
 		}
+	}
+
+	protected function redirectPayment($url)
+	{
+		Tools::redirect($url);
 	}
 
 	private function generateSignature($orderId, $amount, $currency, $secretKey)

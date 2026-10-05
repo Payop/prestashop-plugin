@@ -2,15 +2,21 @@
 
 class PayopCallbackModuleFrontController extends ModuleFrontController
 {
+	private $lockedCartId = 0;
 
 	public function initContent()
 	{
 		parent::initContent();
-		$this->callbackRequest();
+		try {
+			$this->callbackRequest();
+		} catch (Throwable $e) {
+			PrestaShopLogger::addLog('[Payop] Callback processing failed for a verified request.');
+			$this->respond(409, 'processing_failed');
+		}
 		$this->setTemplate('module:payop/views/templates/front/callback.tpl');
 	}
 
-	private function callbackRequest()
+	protected function callbackRequest()
 	{
 		if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 			$this->respond(405, 'method_not_allowed');
@@ -21,14 +27,20 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 			$this->respond(403, 'invalid_signature');
 		}
 
-		$rawData = file_get_contents('php://input');
-		$callback = json_decode($rawData, false);
-		if (!$callback || !isset($callback->transaction->order->id, $callback->transaction->state, $callback->invoice->id)) {
+		$callback = $this->readCallbackPayload();
+		if (!$callback || !isset($callback->transaction->order->id, $callback->transaction->state, $callback->invoice->id)
+			|| !is_scalar($callback->transaction->order->id) || !is_scalar($callback->transaction->state)
+			|| !is_scalar($callback->invoice->id)
+			|| (isset($callback->transaction->id) && !is_scalar($callback->transaction->id))
+			|| (isset($callback->invoice->txid) && !is_scalar($callback->invoice->txid))) {
 			$this->respond(400, 'invalid_payload');
 		}
 
 		$orderId = (int) $callback->transaction->order->id;
 		$state = (int) $callback->transaction->state;
+		if (!in_array($state, [1, 2, 3, 4, 5, 9, 15], true)) {
+			$this->respond(400, 'unsupported_state');
+		}
 		$invoiceId = (string) $callback->invoice->id;
 		$transactionId = '';
 
@@ -48,11 +60,19 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 			$this->respond(403, 'invalid_order_module');
 		}
 
-		$orderMeta = $this->module->getOrderMetaByOrderId($orderId);
-		$hasStoredInvoice = $orderMeta && !empty($orderMeta['invoice_id']);
-		if ($hasStoredInvoice && !hash_equals((string) $orderMeta['invoice_id'], $invoiceId)) {
-			PrestaShopLogger::addLog('[Payop] Invoice mismatch for order #' . $orderId . '.');
-			$this->respond(409, 'invoice_mismatch');
+		if (!$this->module->acquireCartLock($order->id_cart)) {
+			$this->respond(409, 'payment_busy');
+		}
+		$this->lockedCartId = (int) $order->id_cart;
+		// Reload after the lock: another IPN may have completed payment meanwhile.
+		$order = new Order($orderId);
+		$invoiceContext = $this->module->getInvoiceContext($orderId, $invoiceId);
+		if (!$invoiceContext || (int) $invoiceContext['id_cart'] !== (int) $order->id_cart) {
+			$this->respond(409, 'unknown_invoice');
+		}
+
+		if (!empty($invoiceContext['transaction_id']) && !hash_equals($invoiceContext['transaction_id'], $transactionId)) {
+			$this->respond(409, 'transaction_binding_mismatch');
 		}
 
 		if ($transactionId === '') {
@@ -60,27 +80,22 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 			$this->respond(409, 'missing_transaction_id');
 		}
 
-		if (!$this->module->hasApiToken()) {
-			PrestaShopLogger::addLog('[Payop] Callback rejected for order #' . $orderId . ' because API token is missing.');
-			$this->respond(409, 'missing_api_token');
-		}
-
-		$transaction = $this->module->fetchTransaction($transactionId);
-		if (empty($transaction['ok'])) {
-			PrestaShopLogger::addLog('[Payop] Transaction API lookup failed for order #' . $orderId . ': ' . (isset($transaction['error']) ? $transaction['error'] : 'unknown error') . '.');
-			$this->respond(409, 'transaction_lookup_failed');
-		}
-
-		$verification = $this->module->verifyTransactionForOrder($transaction, $order, $state, $transactionId);
+		$invoice = $this->module->fetchInvoice($invoiceId);
+		$verification = $this->module->verifyInvoiceForOrder($invoice, $order, $invoiceId, $transactionId, $state);
 		if (empty($verification['ok'])) {
-			PrestaShopLogger::addLog('[Payop] Transaction verification failed for order #' . $orderId . ': ' . $verification['error'] . '.');
-			$this->respond(409, 'transaction_verification_failed');
+			PrestaShopLogger::addLog('[Payop] Invoice verification failed for order #' . $orderId . '.');
+			$this->respond(409, 'invoice_verification_failed');
 		}
-
-		$boundCartId = $orderMeta ? (int) $orderMeta['id_cart'] : (int) $order->id_cart;
-		if (!$this->module->saveOrderMeta($orderId, $boundCartId, $invoiceId, $transactionId)) {
-			PrestaShopLogger::addLog('[Payop] Failed to persist callback metadata for order #' . $orderId . '.');
-			$this->respond(409, 'metadata_persist_failed');
+		$state = (int) $verification['state'];
+		if (!$this->module->mayChangeInvoiceOrderState($order, $invoiceId, $state)) {
+			if ($state === 2) {
+				$this->addPaymentIfNeeded($order, $transactionId);
+			}
+			// Keep the immutable invoice context, including verified late events.
+			if (!$this->module->recordInvoiceTransaction($orderId, $invoiceId, $transactionId, $state)) {
+				$this->respond(409, 'metadata_persist_failed');
+			}
+			$this->respond(200, 'OK');
 		}
 
 		$currentState = (int) $order->getCurrentState();
@@ -126,15 +141,23 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 				$this->respond(400, 'unsupported_state');
 		}
 
+		if (!$this->module->recordInvoiceTransaction($orderId, $invoiceId, $transactionId, $state)) {
+			$this->respond(409, 'metadata_persist_failed');
+		}
 		$this->respond(200, 'OK');
 	}
 
 	private function isValidCallbackSignature()
 	{
-		$providedSignature = (string) Tools::getValue('signature');
+		$providedSignature = Tools::getValue('signature');
+		// Legacy merchants can keep their existing unsigned callback URL.
+		// Every event still requires full server-side invoice verification below.
+		if ($providedSignature === false || $providedSignature === null || $providedSignature === '') {
+			return true;
+		}
 		$expectedSignature = (string) $this->module->getCallbackSignature();
 
-		return $providedSignature !== '' && $expectedSignature !== '' && hash_equals($expectedSignature, $providedSignature);
+		return is_string($providedSignature) && $providedSignature !== '' && $expectedSignature !== '' && hash_equals($expectedSignature, $providedSignature);
 	}
 
 	private function changeOrderState(Order $order, $stateId, $sendEmail = false)
@@ -149,6 +172,8 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 
 		if ($sendEmail) {
 			$history->addWithemail();
+		} else {
+			$history->add();
 		}
 	}
 
@@ -186,7 +211,7 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 			}
 
 			if (!$paymentWithoutTransaction->update()) {
-				PrestaShopLogger::addLog('[Payop] Failed to update transaction ID for order #' . (int) $order->id . '.');
+				throw new RuntimeException('Failed to update order payment transaction ID.');
 			}
 
 			return;
@@ -197,11 +222,27 @@ class PayopCallbackModuleFrontController extends ModuleFrontController
 			$paymentMethod = (string) $this->module->displayName;
 		}
 
-		$order->addOrderPayment($orderTotal, $paymentMethod, $transactionId, $currency);
+		if (!$order->addOrderPayment($orderTotal, $paymentMethod, $transactionId, $currency)) {
+			throw new RuntimeException('Failed to persist order payment.');
+		}
 	}
 
-	private function respond($statusCode, $body = '')
+	protected function readCallbackPayload()
 	{
+		return json_decode(file_get_contents('php://input'));
+	}
+
+	protected function releaseCallbackLock()
+	{
+		if ($this->lockedCartId) {
+			$this->module->releaseCartLock($this->lockedCartId);
+			$this->lockedCartId = 0;
+		}
+	}
+
+	protected function respond($statusCode, $body = '')
+	{
+		$this->releaseCallbackLock();
 		$statusMap = [
 			200 => 'OK',
 			400 => 'Bad Request',

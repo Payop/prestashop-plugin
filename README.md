@@ -18,11 +18,49 @@ Add the ability to accept payments in PrestaShop via Payop.com.
  4. Click "Configure" after successful installation. 
  5. Configure and save your settings accordingly.
 
-You can issue **Public key** and **Secret key** after registering as merchant on Payop.com.
+## Configuration and additional checkout buttons
 
-Use the following parameters to configure your Payop project:
-* **API JWT Token**: Create a Bearer token in the Payop dashboard and paste it into the module settings.
-* **Callback/IPN URL**: Copy the **Signed Callback URL** directly from the module settings page after saving the configuration.
+The module supports PrestaShop 8.0+ and uses the native `PaymentOption` checkout integration. Use the PHP version supported by your PrestaShop installation. Version 2.4.0 was tested locally on PrestaShop 9.2.0 / PHP 8.3 and PrestaShop 8.2.8 / PHP 8.1; other target versions require a compatibility run before release.
+
+1. Enable Payop payments and configure the existing Display Name, Description, Public Key and Secret Key. These settings continue to control the original Payop Hosted Page option.
+2. The optional **JWT Token** is used only to load the project payment method catalogue. Invoice creation and IPN payment verification do not use JWT. Existing saved JWT values are retained for catalogue loading.
+3. To load the project payment method catalogue, save **JWT Token** and the Public Key, then click **Refresh saved project payment methods**. JWT is not required to create invoices or verify IPN, and an absent/expired JWT cannot block payment confirmation. Refresh uses saved credentials and does not save unsaved edits.
+4. Under **Additional checkout payment buttons**, click **Add payment button**. Set Enabled, a customer title and description for each shop language, and select an integration type:
+   - **Hosted Page**: shows all available methods and omits `paymentMethod` from the invoice request.
+   - **Hosted Page with Payment Method ID**: select a project method from the dropdown. Selection is required for this type and the saved ID is sent as `paymentMethod`.
+5. Save. The original Payop button and each enabled additional button appear separately on checkout. There is no configured limit on the number of additional buttons. All buttons share the module keys and configuration. Empty translations fall back to the default shop language; a title in the default language is required.
+6. Disable a row to hide it without deleting its configuration, or remove it and save. Disabled/deleted options cannot be submitted for a new invoice.
+
+API errors show a warning and retain existing buttons and the last successfully loaded catalogue for the same project. Previously saved method IDs remain editable even if the catalogue is temporarily unavailable. New method IDs must be selected from the loaded project catalogue. The catalogue is cached for five minutes and can be refreshed explicitly.
+
+For new setups, use the **Signed Callback URL** shown in the module settings. Existing signed and legacy unsigned callback URLs remain supported after upgrade, without reconfiguration. If a signature is supplied, it must be valid. All callbacks require server-side invoice verification. Changing the JWT does not change the callback URL.
+
+## Returning from Payop and IPN handling
+
+PrestaShop creates the order before redirecting to Payop. When returning to checkout or the payment failure page, the customer can select another Payop option on a payment retry page for that same order. Each retry creates a fresh invoice, including when reselecting the same option. The order amount and currency remain those of the existing order; retry does not create a new order or use an edited cart total.
+
+Every issued invoice retains its order/cart, button and method context in `payop_invoice_history`. The current invoice pointer remains in `payop_order_meta`. Removing a button does not remove its invoice history. Invoice creation and IPN processing use the same cart lock to serialize concurrent payment attempts.
+
+Unknown invoices are rejected. IPN requires a stored order/cart/invoice association and a successful HTTPS lookup of the invoice at `/v1/invoices/{invoiceID}` without an Authorization header. The response must match the invoice ID, order ID, amount, currency, status and `transactionIdentifier`. Invoice status is mapped separately from transaction state. Callback data alone can never confirm payment; API errors fail closed for retry. Provided callback signatures are validated, while legacy unsigned callback URLs remain supported through the same full invoice verification. A verified successful payment of an earlier invoice can complete the existing order. Pending, failed or expired events for an earlier invoice do not change the current order attempt. An order that has already been paid cannot be downgraded by a later event, including after it moves to a shipping status. Repeated successful IPN does not create another order/payment or repeat the state transition. A browser return alone never changes payment state.
+
+**Do not pay multiple invoices for the same order.** If the customer pays two attempts, the module preserves their verified history and keeps the order paid; handling a duplicate charge/refund belongs to merchant reconciliation.
+
+## Upgrade from 2.3.x
+
+Replace the module files and run the normal module **Upgrade** action in Module Manager (or `php bin/console prestashop:module upgrade payop`). Do not uninstall/reset the module. The upgrade registers the retry hook and migrates the currently stored invoice into history. Existing keys, API JWT, names, descriptions, enabled setting and callback signature remain unchanged; additional buttons start empty. Invoices overwritten by versions before 2.4.0 cannot be recovered retrospectively.
+
+## Development verification
+
+Run against a disposable installed PrestaShop shop:
+
+```sh
+PAYOP_TEST_SHOP=1 php modules/payop/tests/integration.php
+find modules/payop -name '*.php' -not -path '*/vendor/*' -exec php -l {} \;
+```
+
+The integration suite replaces external API calls with deterministic responses, exercises the real module/controllers and database, and rolls back its synthetic orders and configuration. It covers normal and method-specific invoice payloads, switching options on the same order, settings validation, unavailable JWT/catalogue, unknown invoices, signature/binding rejection, late success/failure/timeout and duplicate IPN. It does not perform live payments.
+
+Before publishing, verify with a real Payop project: load its actual method catalogue, create each invoice, follow the Hosted Page redirects and deliver signed IPN to a public HTTPS test shop. Test checkout with both logged-in and guest customers, browser Back, and each supported PrestaShop/PHP combination. Publication/tagging is a separate step.
 
 ## Support
 
@@ -105,3 +143,15 @@ file that come with this project.
 = 2.3.1 =
 * 2026-04-29
 * Improved payment record handling in callbacks: existing order payments are updated with the transaction ID when possible, and duplicate payment records are avoided.
+
+= 2.4.0 (unreleased) =
+* Added unlimited additional checkout payment options with per-language customer titles and descriptions.
+* Added Hosted Page and Hosted Page with Payment Method ID integration types with conditional method selection.
+* Added optional JWT for project payment method discovery only, cached catalogue and recoverable API errors.
+* Preserved the original Hosted Page and existing credentials/settings during upgrade.
+* Added immutable invoice history and same-order payment retries when changing a payment option.
+* Serialized invoice creation and IPN handling, rejected unknown invoices and verified invoice/order/amount/currency/status/transaction through the invoice API without JWT.
+* Preserved existing callback URLs and ensured missing/expired catalogue JWT cannot block payment confirmation.
+* Prevented superseded failures/timeouts and repeated IPN from downgrading or duplicating an already paid order.
+* Fixed payment editor metadata visibility in legacy back-office styles.
+* Updated the Payop module logo.
