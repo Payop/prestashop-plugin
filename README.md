@@ -144,7 +144,7 @@ file that come with this project.
 * 2026-04-29
 * Improved payment record handling in callbacks: existing order payments are updated with the transaction ID when possible, and duplicate payment records are avoided.
 
-= 2.4.0 =
+= 2.4.0 (unreleased) =
 * Added unlimited additional checkout payment options with per-language customer titles and descriptions.
 * Added Hosted Page and Hosted Page with Payment Method ID integration types with conditional method selection.
 * Added optional JWT for project payment method discovery only, cached catalogue and recoverable API errors.
@@ -153,3 +153,5 @@ file that come with this project.
 * Serialized invoice creation and IPN handling, rejected unknown invoices and verified invoice/order/amount/currency/status/transaction through the invoice API without JWT.
 * Preserved existing callback URLs and ensured missing/expired catalogue JWT cannot block payment confirmation.
 * Prevented superseded failures/timeouts and repeated IPN from downgrading or duplicating an already paid order.
+* Fixed payment editor metadata visibility in legacy back-office styles.
+* Updated the Payop module logo.
