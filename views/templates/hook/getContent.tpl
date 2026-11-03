@@ -51,6 +51,14 @@
 					</div>
 				</div>
 
+                <div class="form-group clearfix">
+                    <label class="col-lg-3" for="projectId">{l s='Project ID' mod='payop'}</label>
+                    <div class="col-lg-9">
+                        <input type="text" id="projectId" name="projectId" value="{if isset($projectId)}{$projectId|escape:'htmlall':'UTF-8'}{/if}" />
+                        <p class="help-block">{l s='Copy the Project ID from Payop project settings to load available payment methods. It may differ from the Public Key suffix after a project transfer. Save before refreshing methods.' mod='payop'}</p>
+                    </div>
+                </div>
+
 				<div class="form-group clearfix">
 					<label class="col-lg-3">{l s='JWT Token' mod='payop'}</label>
 					<div class="col-lg-9">

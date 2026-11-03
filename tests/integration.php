@@ -75,6 +75,7 @@ try {
     config('PAYOP_ENABLE', 1);
     config('PAYOP_NAME', 'Payop');
     config('PAYOP_PUBLIC_KEY', 'application-test');
+    config('PAYOP_PROJECT_ID', '1e2d34f0-3aa6-472f-bea6-a67fe752b45a');
     config('PAYOP_API_TOKEN', '');
     config('PAYOP_METHODS_TOKEN', 'legacy-methods-token');
     check($module->getMethodsToken() === 'legacy-methods-token', 'legacy catalogue token remains usable when the existing API token is empty');
