@@ -41,7 +41,7 @@ PrestaShop creates the order before redirecting to Payop. When returning to chec
 
 Every issued invoice retains its order/cart, button and method context in `payop_invoice_history`. The current invoice pointer remains in `payop_order_meta`. Removing a button does not remove its invoice history. Invoice creation and IPN processing use the same cart lock to serialize concurrent payment attempts.
 
-Unknown invoices are rejected. IPN requires a stored order/cart/invoice association and a successful HTTPS lookup of the invoice at `/v1/invoices/{invoiceID}` without an Authorization header. The response must match the invoice ID, order ID, amount, currency, status and `transactionIdentifier`. Invoice status is mapped separately from transaction state. Callback data alone can never confirm payment; API errors fail closed for retry. Provided callback signatures are validated, while legacy unsigned callback URLs remain supported through the same full invoice verification. A verified successful payment of an earlier invoice can complete the existing order. Pending, failed or expired events for an earlier invoice do not change the current order attempt. An order that has already been paid cannot be downgraded by a later event, including after it moves to a shipping status. Repeated successful IPN does not create another order/payment or repeat the state transition. A browser return alone never changes payment state.
+Unknown invoices are rejected. IPN requires a stored order/cart/invoice association and a successful HTTPS lookup of the invoice at `/v1/invoices/{invoiceID}` with `publicKey` and `signature` headers (SHA-256 hex of `invoiceId:secretKey`), without JWT. The response must match the invoice ID, order ID, amount, currency, status and `transactionIdentifier`. Invoice status is mapped separately from transaction state. Callback data alone can never confirm payment; API errors fail closed for retry. Provided callback signatures are validated, while legacy unsigned callback URLs remain supported through the same full invoice verification. A verified successful payment of an earlier invoice can complete the existing order. Pending, failed or expired events for an earlier invoice do not change the current order attempt. An order that has already been paid cannot be downgraded by a later event, including after it moves to a shipping status. Repeated successful IPN does not create another order/payment or repeat the state transition. A browser return alone never changes payment state.
 
 **Do not pay multiple invoices for the same order.** If the customer pays two attempts, the module preserves their verified history and keeps the order paid; handling a duplicate charge/refund belongs to merchant reconciliation.
 
@@ -54,6 +54,7 @@ Replace the module files and run the normal module **Upgrade** action in Module 
 Run against a disposable installed PrestaShop shop:
 
 ```sh
+php modules/payop/tests/invoice-api.php
 PAYOP_TEST_SHOP=1 php modules/payop/tests/integration.php
 find modules/payop -name '*.php' -not -path '*/vendor/*' -exec php -l {} \;
 ```
@@ -155,3 +156,8 @@ file that come with this project.
 * Prevented superseded failures/timeouts and repeated IPN from downgrading or duplicating an already paid order.
 * Fixed payment editor metadata visibility in legacy back-office styles.
 * Updated the Payop module logo.
+
+= 2.4.1 (unreleased) =
+* Authenticate invoice lookups with the project Public Key and a SHA-256 signature, allowing verification of paid overdue invoices without JWT.
+* Reject missing project credentials, transport/HTTP errors and malformed invoice responses without confirming payment; log safe diagnostic reasons.
+* Added standalone mocked invoice API checks and overdue-payment integration coverage.

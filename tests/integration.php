@@ -204,7 +204,7 @@ try {
         $statuses = [1 => 0, 2 => 1, 3 => 5, 4 => 4, 5 => 5, 9 => 4, 15 => 2];
         $module->invoiceDetails = ['identifier' => $invoice, 'orderIdentifier' => $transaction['orderId'],
             'amount' => $transaction['amount'], 'currency' => $transaction['currency'],
-            'status' => $statuses[$transaction['state']], 'transactionIdentifier' => $transaction['txid']];
+            'status' => $statuses[$transaction['state']], 'transactionIdentifier' => $transaction['txid'], 'isOverdue' => !empty($overrides['isOverdue'])];
         return $callback->dispatchTest(['transaction' => ['id' => $tx, 'state' => $state, 'order' => ['id' => $order->id]], 'invoice' => ['id' => $invoice, 'txid' => $tx]]);
     };
     check($send('unknown', 2, 'tx-unknown')[0] === 409, 'unknown invoice rejected before payment');
@@ -228,13 +228,14 @@ try {
     $_POST['signature'] = $module->getCallbackSignature();
     check((int) (new Order($order->id))->current_state === (int) $order->current_state, 'late failure does not cancel current attempt');
     check($send($oldInvoice, 15, 'tx-old')[0] === 200 && (int) (new Order($order->id))->current_state === (int) $order->current_state, 'late timeout does not cancel current attempt');
-    check($send($oldInvoice, 2, 'tx-old')[0] === 200, 'late success for known invoice verified without JWT');
+    check($send($oldInvoice, 2, 'tx-old', ['isOverdue' => true])[0] === 200, 'paid overdue invoice completes the order without JWT');
     check((int) (new Order($order->id))->current_state === (int) Configuration::get('PS_OS_PAYMENT'), 'verified late success pays the existing order');
     $payments = (int) $db->getValue("SELECT COUNT(*) FROM " . _DB_PREFIX_ . "order_payment WHERE order_reference='" . pSQL($order->reference) . "'");
     $history = (int) $db->getValue('SELECT COUNT(*) FROM ' . _DB_PREFIX_ . 'order_history WHERE id_order=' . (int) $order->id);
     config('PAYOP_API_TOKEN', 'invalid-expired-jwt');
-    check($send($oldInvoice, 2, 'tx-old')[0] === 200, 'duplicate success verified even with an invalid JWT');
+    check($send($oldInvoice, 2, 'tx-old', ['isOverdue' => true])[0] === 200, 'duplicate overdue success verified even with an invalid JWT');
     check($payments === (int) $db->getValue("SELECT COUNT(*) FROM " . _DB_PREFIX_ . "order_payment WHERE order_reference='" . pSQL($order->reference) . "'") && $history === (int) $db->getValue('SELECT COUNT(*) FROM ' . _DB_PREFIX_ . 'order_history WHERE id_order=' . (int) $order->id), 'duplicate IPN creates no extra payments or state actions');
+    check($send($oldInvoice, 4, 'tx-old')[0] === 200 && (int) (new Order($order->id))->current_state === (int) Configuration::get('PS_OS_PAYMENT'), 'late pending cannot downgrade a paid order');
     check($send($newInvoice, 3, 'tx-new')[0] === 200 && (int) (new Order($order->id))->current_state === (int) Configuration::get('PS_OS_PAYMENT'), 'current failure cannot downgrade a paid order');
     $shippingOrder = new Order($order->id);
     $shippingOrder->current_state = (int) Configuration::get('PS_OS_SHIPPING');

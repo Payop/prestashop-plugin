@@ -155,20 +155,48 @@ trait PayopInvoiceHistory
 
     protected function requestInvoiceDetails($invoiceId)
     {
-        $ch = curl_init('https://api.payop.com/v1/invoices/' . rawurlencode($invoiceId));
-        // The invoice endpoint does not require JWT. Never couple payment
-        // confirmation to credentials used to discover the project catalogue.
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_HTTPHEADER => ['Accept: application/json', 'Content-Type: application/json']]);
-        $body = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $response = is_string($body) ? json_decode($body, true) : null;
-        if ($status !== 200 || !isset($response['data']) || !is_array($response['data'])) {
+        $publicKey = Configuration::get('PAYOP_PUBLIC_KEY');
+        $secretKey = Configuration::get('PAYOP_SECRET_KEY');
+        if (!is_string($invoiceId) || trim($invoiceId) === ''
+            || !is_string($publicKey) || trim($publicKey) === ''
+            || !is_string($secretKey) || trim($secretKey) === ''
+            || strpbrk($publicKey, "\r\n") !== false) {
+            PrestaShopLogger::addLog('[Payop] Invoice lookup failed: missing or invalid invoice ID or project keys.');
             return ['ok' => false];
         }
-        return ['ok' => true, 'data' => $response['data']];
+        $result = $this->executeInvoiceDetailsRequest(
+            'https://api.payop.com/v1/invoices/' . rawurlencode($invoiceId),
+            [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_HTTPHEADER => ['Accept: application/json',
+                    'publicKey: ' . $publicKey,
+                    'signature: ' . hash('sha256', $invoiceId . ':' . $secretKey)]]
+        );
+        if ($result['body'] === false) {
+            PrestaShopLogger::addLog('[Payop] Invoice lookup failed: transport error ' . (int) $result['errno'] . '.');
+            return ['ok' => false];
+        }
+        if ($result['status'] !== 200) {
+            PrestaShopLogger::addLog('[Payop] Invoice lookup failed. HTTP code: ' . (int) $result['status']);
+            return ['ok' => false];
+        }
+        $response = json_decode($result['body']);
+        if (!is_object($response) || !isset($response->data) || !is_object($response->data)) {
+            PrestaShopLogger::addLog('[Payop] Invoice lookup failed: invalid API response.');
+            return ['ok' => false];
+        }
+        return ['ok' => true, 'data' => (array) $response->data];
+    }
+
+    protected function executeInvoiceDetailsRequest($url, array $options)
+    {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, $options);
+        $body = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $errno = curl_errno($ch);
+        curl_close($ch);
+        return ['body' => $body, 'status' => $status, 'errno' => $errno];
     }
 
     public function verifyInvoiceForOrder(array $invoice, Order $order, $invoiceId, $transactionId, $expectedState)
