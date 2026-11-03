@@ -23,7 +23,7 @@ class Payop extends PaymentModule
 	{
 		$this->name = 'payop';
 		$this->tab = 'payments_gateways';
-		$this->version = '2.4.0';
+		$this->version = '2.4.1';
 		$this->author = 'PAYOP';
 		$this->controllers = ['payment', 'validation', 'failPage', 'callback', 'success'];
 		$this->currencies = true;
