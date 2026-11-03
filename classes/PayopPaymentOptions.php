@@ -116,7 +116,7 @@ trait PayopPaymentOptions
 
     private function methodsProjectKey()
     {
-        return hash('sha256', trim((string) Configuration::get('PAYOP_PUBLIC_KEY')));
+        return hash('sha256', trim((string) Configuration::get('PAYOP_PROJECT_ID')) . '|' . trim((string) Configuration::get('PAYOP_PUBLIC_KEY')));
     }
 
     public function getCachedPaymentMethods()
@@ -127,19 +127,18 @@ trait PayopPaymentOptions
 
     public function loadPaymentMethods($refresh = false)
     {
-        $publicKey = trim((string) Configuration::get('PAYOP_PUBLIC_KEY'));
+        $projectId = trim((string) Configuration::get('PAYOP_PROJECT_ID'));
         $token = $this->getMethodsToken();
         $cached = $this->getCachedPaymentMethods();
         $cache = json_decode((string) Configuration::get('PAYOP_METHODS_CACHE'), true);
-        $fingerprint = hash('sha256', $publicKey . '|' . $token);
+        $fingerprint = hash('sha256', $this->methodsProjectKey() . '|' . $token);
         if (!$refresh && isset($cache['fingerprint'], $cache['expires']) && $cache['fingerprint'] === $fingerprint && $cache['expires'] > time()) {
             return ['ok' => true, 'methods' => $cached];
         }
-        if ($publicKey === '' || $token === '') {
-            return ['ok' => false, 'methods' => $cached, 'error' => $this->l('Save the Public Key and JWT Token to load methods. Ordinary Hosted Page does not require this token.')];
+        if (!preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i', $projectId) || $token === '') {
+            return ['ok' => false, 'methods' => $cached, 'error' => $this->l('Save a valid Project ID and JWT Token to load methods. Ordinary Hosted Page does not require this token.')];
         }
-        $applicationId = preg_replace('/^application-/', '', $publicKey);
-        $response = $this->requestPaymentMethods($applicationId, $token);
+        $response = $this->requestPaymentMethods($projectId, $token);
         if (empty($response['ok'])) {
             return ['ok' => false, 'methods' => $cached, 'error' => $response['error']];
         }
@@ -170,7 +169,7 @@ trait PayopPaymentOptions
         if ($status !== 200 || !is_array($response) || !isset($response['data']) || !is_array($response['data'])) {
             $message = in_array($status, [401, 403], true)
                 ? $this->l('Unable to load payment methods: invalid JWT or insufficient project permissions. Previously saved buttons were retained.')
-                : $this->l('Unable to load payment methods. Check the Public Key and JWT, then retry. Previously saved buttons were retained.');
+                : $this->l('Unable to load payment methods. Check the Project ID and JWT, then retry. Previously saved buttons were retained.');
             return ['ok' => false, 'error' => $message];
         }
         return ['ok' => true, 'data' => $response['data']];

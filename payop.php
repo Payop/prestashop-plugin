@@ -76,17 +76,21 @@ class Payop extends PaymentModule
 		}
 		try {
 			$buttons = $this->validateButtons(Tools::getValue('payop_buttons_json', '[]'));
-			foreach (['enablePayments', 'displayName', 'description', 'publicKey', 'secretKey', 'apiToken'] as $field) {
+			foreach (['enablePayments', 'displayName', 'description', 'publicKey', 'secretKey', 'projectId', 'apiToken'] as $field) {
 				if (!is_scalar(Tools::getValue($field, ''))) {
 					throw new InvalidArgumentException($this->l('Invalid settings value.'));
 				}
+			}
+			$projectId = trim((string) Tools::getValue('projectId', ''));
+			if ($projectId !== '' && !preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i', $projectId)) {
+				throw new InvalidArgumentException($this->l('Enter a valid Project ID from the Payop project settings.'));
 			}
 		} catch (InvalidArgumentException $e) {
 			$this->context->smarty->assign('payop_error', $e->getMessage());
 			return;
 		}
 		Configuration::updateValue('PAYOP_ENABLE', (int) Tools::getValue('enablePayments'));
-		foreach (['PAYOP_NAME' => 'displayName', 'DESCRIPTION' => 'description', 'PAYOP_PUBLIC_KEY' => 'publicKey', 'PAYOP_SECRET_KEY' => 'secretKey', 'PAYOP_API_TOKEN' => 'apiToken'] as $key => $field) {
+		foreach (['PAYOP_NAME' => 'displayName', 'DESCRIPTION' => 'description', 'PAYOP_PROJECT_ID' => 'projectId', 'PAYOP_PUBLIC_KEY' => 'publicKey', 'PAYOP_SECRET_KEY' => 'secretKey', 'PAYOP_API_TOKEN' => 'apiToken'] as $key => $field) {
 			Configuration::updateValue($key, trim((string) Tools::getValue($field, '')));
 		}
 		// Once the unified field is saved, do not revive a hidden legacy token.
@@ -109,6 +113,7 @@ class Payop extends PaymentModule
 			'enablePayments' => (int) Configuration::get('PAYOP_ENABLE'),
 			'displayName' => Configuration::get('PAYOP_NAME'),
 			'description' => Configuration::get('DESCRIPTION'),
+			'projectId' => Configuration::get('PAYOP_PROJECT_ID'),
 			'publicKey' => Configuration::get('PAYOP_PUBLIC_KEY'),
 			'secretKey' => Configuration::get('PAYOP_SECRET_KEY'),
 			'apiToken' => $this->getMethodsToken(),

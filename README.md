@@ -24,7 +24,7 @@ The module supports PrestaShop 8.0+ and uses the native `PaymentOption` checkout
 
 1. Enable Payop payments and configure the existing Display Name, Description, Public Key and Secret Key. These settings continue to control the original Payop Hosted Page option.
 2. The optional **JWT Token** is used only to load the project payment method catalogue. Invoice creation and IPN payment verification do not use JWT. Existing saved JWT values are retained for catalogue loading.
-3. To load the project payment method catalogue, save **JWT Token** and the Public Key, then click **Refresh saved project payment methods**. JWT is not required to create invoices or verify IPN, and an absent/expired JWT cannot block payment confirmation. Refresh uses saved credentials and does not save unsaved edits.
+3. To load the project payment method catalogue, save **Project ID** from Payop project settings and **JWT Token**, then click **Refresh saved project payment methods**. JWT is not required to create invoices or verify IPN, and an absent/expired JWT cannot block payment confirmation. Project ID is never inferred from the Public Key: transferred projects may have different identifiers. Existing installations must enter Project ID to refresh the catalogue; saved buttons and invoice processing remain available. Refresh uses saved credentials and does not save unsaved edits.
 4. Under **Additional checkout payment buttons**, click **Add payment button**. Set Enabled, a customer title and description for each shop language, and select an integration type:
    - **Hosted Page**: shows all available methods and omits `paymentMethod` from the invoice request.
    - **Hosted Page with Payment Method ID**: select a project method from the dropdown. Selection is required for this type and the saved ID is sent as `paymentMethod`.
@@ -55,6 +55,7 @@ Run against a disposable installed PrestaShop shop:
 
 ```sh
 php modules/payop/tests/invoice-api.php
+php modules/payop/tests/payment-methods.php
 PAYOP_TEST_SHOP=1 php modules/payop/tests/integration.php
 find modules/payop -name '*.php' -not -path '*/vendor/*' -exec php -l {} \;
 ```
@@ -161,3 +162,4 @@ file that come with this project.
 * Authenticate invoice lookups with the project Public Key and a SHA-256 signature, allowing verification of paid overdue invoices without JWT.
 * Reject missing project credentials, transport/HTTP errors and malformed invoice responses without confirming payment; log safe diagnostic reasons.
 * Added standalone mocked invoice API checks and overdue-payment integration coverage.
+* Added explicit Project ID for payment method discovery, fixing transferred projects whose Public Key suffix differs from their Project ID; catalogue caches are isolated by project.
