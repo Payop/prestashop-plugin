@@ -163,3 +163,6 @@ file that come with this project.
 * Reject missing project credentials, transport/HTTP errors and malformed invoice responses without confirming payment; log safe diagnostic reasons.
 * Added standalone mocked invoice API checks and overdue-payment integration coverage.
 * Added explicit Project ID for payment method discovery, fixing transferred projects whose Public Key suffix differs from their Project ID; catalogue caches are isolated by project.
+
+= 2.4.2 (unreleased) =
+* Identify invoices created by the PrestaShop module with the `x-integration-tag: prestashop` header.
