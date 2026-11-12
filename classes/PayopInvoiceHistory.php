@@ -116,7 +116,7 @@ trait PayopInvoiceHistory
         $headers = [];
         curl_setopt_array($ch, [
             CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($request),
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'x-integration-tag: prestashop'], CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 20,
             CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_HEADERFUNCTION => static function ($curl, $line) use (&$headers) {
